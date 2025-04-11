@@ -1,0 +1,1 @@
+pip install aiohttp jinja2 langchain-text-splitters
