@@ -321,3 +321,22 @@ if __name__ == "__main__":
     agent = Agent(task=task, prompt=prompt)
 
     asyncio.run(agent.run(loop=False))
+```
+from setuptools import setup, find_packages
+
+setup(
+    name="deepseek-search-agent",
+    version="0.1.0",
+    packages=find_packages(),
+    install_requires=[
+        "aiohttp",
+        "langchain-text-splitters",
+        "jinja2",  # 用于模板渲染
+        "python-dotenv",  # 用于环境变量管理
+    ],
+    author="DeepSeek Search Agent Developer",
+    author_email="your-email@example.com",
+    description="A search agent using DeepSeek R1 reasoning capabilities",
+    keywords="deepseek, search, agent, reasoning",
+    python_requires=">=3.9",
+)
