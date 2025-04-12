@@ -1,5 +1,16 @@
 import { NextResponse } from 'next/server';
-import { kv } from '@vercel/kv';
+
+// 内存存储，用于演示目的或当Vercel KV不可用时
+const memoryStore: Record<string, any> = {};
+
+// 尝试导入Vercel KV，如果不可用则使用内存存储
+let kv: any;
+try {
+  kv = require('@vercel/kv');
+} catch (error) {
+  console.log('Vercel KV not available, using memory storage');
+  // 继续使用内存存储
+}
 
 export async function POST(request: Request) {
   try {
@@ -23,63 +34,76 @@ export async function POST(request: Request) {
       );
     }
 
-    // 将回调数据存储到Vercel KV或其他存储中
-    // 在真实环境中应该使用数据库或Redis等存储
+    // 获取现有的搜索数据
+    let existingData: any = null;
 
-    // 如果使用Vercel KV (需要先在Vercel上设置)
-    try {
-      // 获取现有的搜索数据
-      const existingData = await kv.get<any>(`search:${searchId}`);
-      const searchData = existingData || {
-        status: 'pending',
-        createdAt: timestamp,
-        updates: [],
-        iterations: [],
-        result: null
-      };
-
-      // 根据更新类型进行处理
-      switch (type) {
-        case 'start':
-          searchData.status = 'processing';
-          searchData.query = data.task;
-          searchData.updates.push({ type, timestamp, data });
-          break;
-
-        case 'iteration':
-          searchData.iterations.push({
-            round: data.round,
-            timestamp,
-            workspace_state: data.workspace_state,
-            tool_calls: data.tool_calls
-          });
-          searchData.updates.push({ type, timestamp, data: { round: data.round } });
-          break;
-
-        case 'complete':
-          searchData.status = 'completed';
-          searchData.result = data.answer;
-          searchData.updates.push({ type, timestamp });
-          break;
-
-        case 'error':
-        case 'timeout':
-          searchData.status = 'failed';
-          searchData.error = data.message || data.error;
-          searchData.updates.push({ type, timestamp, data });
-          break;
+    // 如果Vercel KV可用，尝试从KV获取数据
+    if (kv) {
+      try {
+        existingData = await kv.get(`search:${searchId}`);
+      } catch (kvError) {
+        console.error('Error retrieving data from KV:', kvError);
+        // 回退到内存存储
+        existingData = memoryStore[`search:${searchId}`];
       }
+    } else {
+      // 使用内存存储
+      existingData = memoryStore[`search:${searchId}`];
+    }
 
-      // 保存更新的数据
-      await kv.set(`search:${searchId}`, searchData);
+    // 初始化或更新搜索数据
+    const searchData = existingData || {
+      status: 'pending',
+      createdAt: timestamp,
+      updates: [],
+      iterations: [],
+      result: null
+    };
 
-      // 使用客户端事件通知前端 (生产环境中可以使用WebSockets或Server-Sent Events)
-      // 这里用Vercel KV只是演示，实际应该使用Socket.io或其他实时通信方式
+    // 根据更新类型进行处理
+    switch (type) {
+      case 'start':
+        searchData.status = 'processing';
+        searchData.query = data.task;
+        searchData.updates.push({ type, timestamp, data });
+        break;
 
-    } catch (kvError) {
-      console.error('Error storing data in KV:', kvError);
-      // 如果KV不可用，回退到文件系统存储或内存存储
-      // 为了演示简单，这里不实现回退逻辑
+      case 'iteration':
+        searchData.iterations.push({
+          round: data.round,
+          timestamp,
+          workspace_state: data.workspace_state,
+          tool_calls: data.tool_calls
+        });
+        searchData.updates.push({ type, timestamp, data: { round: data.round } });
+        break;
+
+      case 'complete':
+        searchData.status = 'completed';
+        searchData.result = data.answer;
+        searchData.updates.push({ type, timestamp });
+        break;
+
+      case 'error':
+      case 'timeout':
+        searchData.status = 'failed';
+        searchData.error = data.message || data.error;
+        searchData.updates.push({ type, timestamp, data });
+        break;
+    }
+
+    // 保存更新的数据
+    if (kv) {
+      try {
+        await kv.set(`search:${searchId}`, searchData);
+      } catch (kvError) {
+        console.error('Error storing data in KV:', kvError);
+        // 回退到内存存储
+        memoryStore[`search:${searchId}`] = searchData;
+      }
+    } else {
+      // 使用内存存储
+      memoryStore[`search:${searchId}`] = searchData;
     }
 
     return NextResponse.json({

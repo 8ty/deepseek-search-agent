@@ -1,5 +1,16 @@
 import { NextResponse } from 'next/server';
-import { kv } from '@vercel/kv';
+
+// 引用webhook route中的内存存储，实际项目中应使用共享的存储服务
+const memoryStore: Record<string, any> = {};
+
+// 尝试导入Vercel KV，如果不可用则使用内存存储
+let kv: any;
+try {
+  kv = require('@vercel/kv');
+} catch (error) {
+  console.log('Vercel KV not available, using memory storage');
+  // 继续使用内存存储
+}
 
 export async function GET(
   request: Request,
@@ -15,28 +26,31 @@ export async function GET(
       );
     }
 
-    // 从Vercel KV获取搜索数据
-    try {
-      const searchData = await kv.get<any>(`search:${searchId}`);
+    // 获取搜索数据
+    let searchData = null;
 
-      if (!searchData) {
-        return NextResponse.json(
-          { error: 'Search not found' },
-          { status: 404 }
-        );
+    // 如果Vercel KV可用，优先从KV获取数据
+    if (kv) {
+      try {
+        searchData = await kv.get<any>(`search:${searchId}`);
+      } catch (kvError) {
+        console.error('Error retrieving data from KV:', kvError);
+        // 回退到内存存储
+        searchData = memoryStore[`search:${searchId}`];
       }
+    } else {
+      // 使用内存存储
+      searchData = memoryStore[`search:${searchId}`];
+    }
 
-      return NextResponse.json(searchData);
-
-    } catch (kvError) {
-      console.error('Error retrieving data from KV:', kvError);
-
-      // 在实际部署中，这里应该有回退策略
+    if (!searchData) {
       return NextResponse.json(
-        { error: 'Failed to retrieve search data' },
-        { status: 500 }
+        { error: 'Search not found' },
+        { status: 404 }
       );
     }
+
+    return NextResponse.json(searchData);
 
   } catch (error) {
     console.error('Error getting search status:', error);
