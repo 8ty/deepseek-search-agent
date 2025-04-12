@@ -1,0 +1,24 @@
+services:
+  # Web服务配置
+  - type: web
+    name: deepseek-search-agent
+    env: node
+    region: auto # 自动选择最近的区域
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: REPOSITORY
+        sync: false # 需要手动设置
+      - key: GITHUB_TOKEN
+        sync: false # 需要手动设置
+      - key: DEPLOYMENT_PLATFORM
+        value: render
+
+# 如需添加数据库服务（如Redis），可以取消注释下面的内容
+# databases:
+#  - name: deepseek-search-redis
+#    type: redis
+#    ipAllowList: []
