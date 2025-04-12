@@ -2,6 +2,8 @@
 
 基于GitHub Actions运行DeepSeek R1推理模型的搜索智能体，显示完整的搜索和思考过程。
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fyourusername%2Fdeepseek-search-agent&env=REPOSITORY,GITHUB_TOKEN&project-name=deepseek-search-agent&repository-name=deepseek-search-agent)
+
 ## 项目概述
 
 这个项目使用DeepSeek R1推理模型和Jina AI的搜索API构建了一个搜索智能体，能够：
