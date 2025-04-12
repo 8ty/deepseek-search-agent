@@ -23,7 +23,7 @@
 ### 前置条件
 
 1. GitHub账号
-2. Vercel账号
+2. 部署平台账号（Vercel、Cloudflare、Netlify或Render）
 3. Jina AI API密钥 (从[jina.ai](https://jina.ai)获取)
 4. OpenRouter API密钥 (从[openrouter.ai](https://openrouter.ai)获取)
 
@@ -35,7 +35,11 @@
    - `OPENROUTER_API_KEY`：你的OpenRouter API密钥
    - `GITHUB_TOKEN`：具有workflow权限的个人访问令牌
 
-### 步骤2：部署前端到Vercel
+### 部署选项
+
+您可以选择以下任一平台部署前端应用：
+
+#### 选项1：部署到Vercel
 
 1. 在Vercel上导入你的GitHub仓库
 2. 设置构建配置：
@@ -44,14 +48,77 @@
    - 输出目录：`frontend/.next`
 3. 添加环境变量：
    - `REPOSITORY`：你的GitHub仓库名（格式：owner/repo）
-   - `GITHUB_TOKEN`：与GitHub仓库中相同的个人访问令牌
+   - `GITHUB_TOKEN`：具有workflow权限的个人访问令牌
 4. （可选）如果使用Vercel KV存储：
    - 在Vercel控制台中创建一个KV数据库
    - 关联KV数据库到你的项目
 
+更多详细指南请参见 [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md)
+
+#### 选项2：部署到Cloudflare Pages/Workers
+
+1. 登录到 [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. 导航到 Pages 并点击 "创建项目"
+3. 连接你的GitHub仓库
+4. 配置构建设置：
+   - 框架预设：Next.js
+   - 构建命令：`cd frontend && npm install && npm run build`
+   - 输出目录：`frontend/.next`
+   - 环境变量：
+     - `REPOSITORY`：你的GitHub仓库名
+     - `GITHUB_TOKEN`：GitHub个人访问令牌
+5. 部署应用
+6. 对于需要服务器端逻辑的API路由:
+   - 在 `frontend/next.config.js` 文件中添加 Cloudflare Pages 适配
+   - 或使用 Cloudflare Workers 作为API端点替代
+
+**存储替代方案**：使用 Cloudflare KV 替代 Vercel KV，需要进行相应代码调整。
+
+#### 选项3：部署到Netlify
+
+1. 登录到 [Netlify](https://app.netlify.com/)
+2. 点击 "新建站点" 并选择 "从Git导入"
+3. 连接你的GitHub仓库
+4. 配置构建设置：
+   - 基础目录: `frontend`
+   - 构建命令: `npm run build`
+   - 发布目录: `.next`
+5. 添加环境变量：
+   - `REPOSITORY`：GitHub仓库路径
+   - `GITHUB_TOKEN`：GitHub令牌
+6. 部署应用
+7. 对于API路由，需要配置 Netlify Functions:
+   - 在 `frontend/netlify.toml` 文件中添加函数配置
+   - 调整API路由以使用 Netlify Functions 格式
+
+**存储替代方案**：可以使用 Netlify Functions + 外部数据库服务（如MongoDB Atlas或Firebase）替代Vercel KV。
+
+#### 选项4：部署到Render
+
+1. 登录到 [Render](https://dashboard.render.com/)
+2. 点击 "New" 并选择 "Web Service"
+3. 连接你的GitHub仓库
+4. 配置服务设置：
+   - 名称：自定义名称
+   - 构建命令：`cd frontend && npm install && npm run build`
+   - 启动命令：`cd frontend && npm start`
+   - 环境变量：
+     - `REPOSITORY`：GitHub仓库路径
+     - `GITHUB_TOKEN`：GitHub令牌
+5. 部署应用
+6. API路由将作为Web服务的一部分运行
+
+**存储替代方案**：可以使用Render提供的PostgreSQL或Redis数据库，或集成第三方存储解决方案。
+
+### 部署后回调配置调整
+
+无论使用哪个平台部署，都需要确保GitHub Actions可以正确回调到新的部署URL。需要在GitHub Actions工作流文件中更新回调URL。
+
+检查 `.github/workflows/search-agent.yml` 文件，并确保其中的回调URL与您新的部署域名匹配。
+
 ### 步骤3：测试部署
 
-1. 打开部署后的Vercel网站
+1. 打开部署后的网站
 2. 在首页输入查询问题
 3. 系统会触发GitHub Actions工作流
 4. 在查询结果页面查看处理状态和思考过程

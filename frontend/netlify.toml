@@ -1,0 +1,28 @@
+[build]
+  base = "frontend"
+  publish = ".next"
+  command = "npm run build"
+
+# 为Next.js API路由配置Netlify函数
+[functions]
+  # Netlify函数目录
+  directory = "netlify/functions"
+  # 包含模式 - 可选
+  included_files = ["src/app/api/**"]
+
+# Next.js需要的重定向规则
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/next_server"
+  status = 200
+
+[build.environment]
+  # 使Netlify知道这是一个Next.js项目
+  NEXT_USE_NETLIFY = "true"
+
+# 缓存设置
+[[headers]]
+  # 为静态资产定义缓存头
+  for = "/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
