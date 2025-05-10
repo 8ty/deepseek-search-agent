@@ -220,6 +220,4 @@ deepseek-search-agent/
 
 欢迎贡献代码和提出问题！请提交Pull Request或创建Issue。
 
-## 许可证
 
-[MIT License](LICENSE)
