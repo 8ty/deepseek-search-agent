@@ -17,10 +17,6 @@
     "axios": "^1.6.0",
     "uuid": "^9.0.1",
     "@vercel/kv": "latest"
-<<<<<<< HEAD
-=======
-
->>>>>>> origin/main
   },
   "devDependencies": {
     "@types/node": "^20.8.10",
