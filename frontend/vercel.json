@@ -3,4 +3,8 @@
   "framework": "nextjs",
   "installCommand": "npm install",
   "outputDirectory": ".next"
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> origin/main
