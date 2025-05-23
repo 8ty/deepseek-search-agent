@@ -21,13 +21,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
-      - name: Test async execution steps
+      - name: Run search agent with detailed logging
         env:
           QUERY: ${{ github.event.client_payload.query }}
           CALLBACK_URL: ${{ github.event.client_payload.callback_url }}
           JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: |
-          echo "=== 运行异步执行测试 ==="
-          timeout 90s python async_test.py || echo "异步测试超时或失败"
-          echo "=== 异步测试完成 ==="
+        run: python -m api.github_runner
