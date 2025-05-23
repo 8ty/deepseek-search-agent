@@ -47,7 +47,7 @@
    - 构建命令：`cd frontend && npm install && npm run build`
    - 输出目录：`frontend/.next`
 3. 添加环境变量：
-   - `REPOSITORY`：你的GitHub仓库名（格式：owner/repo）
+   - `REPOSITORY`：你的GitHub仓库名（格式：owner/repo），改成GITHUB_REPOSITORY
    - `GITHUB_TOKEN`：具有workflow权限的个人访问令牌
 4. （可选）如果使用Vercel KV存储：
    - 在Vercel控制台中创建一个KV数据库
