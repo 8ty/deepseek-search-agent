@@ -28,12 +28,19 @@ export async function POST(request: NextRequest) {
     
     // 获取GitHub配置
     const githubConfig = body.github_config;
-    const shouldTriggerGitHub = githubConfig?.force_trigger || 
-      (process.env.NODE_ENV === 'production' && process.env.GITHUB_TOKEN);
     
-    // 使用用户提供的配置或环境变量
-    const githubToken = githubConfig?.token || process.env.GITHUB_TOKEN;
-    const githubRepository = githubConfig?.repository || process.env.GITHUB_REPOSITORY;
+    // 优先使用环境变量，如果环境变量存在就自动使用
+    const envGithubToken = process.env.GITHUB_TOKEN;
+    const envGithubRepository = process.env.GITHUB_REPOSITORY;
+    
+    // 如果有环境变量配置，优先使用环境变量，否则使用用户输入的配置
+    const githubToken = envGithubToken || githubConfig?.token;
+    const githubRepository = envGithubRepository || githubConfig?.repository;
+    
+    // 如果环境变量已配置，或者用户强制触发，就启用GitHub Actions
+    const shouldTriggerGitHub = (envGithubToken && envGithubRepository) || 
+                               githubConfig?.force_trigger || 
+                               (process.env.NODE_ENV === 'production' && githubToken);
 
     // 初始化搜索数据
     const searchData = {
@@ -50,14 +57,12 @@ export async function POST(request: NextRequest) {
     console.log('=== TRIGGER SEARCH DEBUG ===');
     console.log('Search ID:', searchId);
     console.log('Workspace ID:', workspaceId);
-    console.log('Search Data:', searchData);
-    console.log('Memory Store Key:', `search:${searchId}`);
+    console.log('Environment GitHub Token exists:', !!envGithubToken);
+    console.log('Environment GitHub Repository:', envGithubRepository);
+    console.log('Should trigger GitHub:', shouldTriggerGitHub);
+    console.log('=== END TRIGGER SEARCH DEBUG ===');
     
     memoryStorage.set(`search:${searchId}`, searchData);
-    
-    console.log('Data stored. Current memory store keys:', memoryStorage.keys());
-    console.log('Stored data verification:', memoryStorage.get(`search:${searchId}`));
-    console.log('=== END TRIGGER SEARCH DEBUG ===');
 
     // 准备 Webhook 数据
     const webhookData = {
@@ -165,7 +170,9 @@ export async function POST(request: NextRequest) {
       query: body.query,
       workspace_id: workspaceId,
       search_id: searchId,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      // 返回环境变量配置状态，让前端知道是否需要手动配置
+      environment_configured: !!(envGithubToken && envGithubRepository)
     };
 
     return NextResponse.json(response);
@@ -184,9 +191,15 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
+  // 检查环境变量配置状态
+  const envConfigured = !!(process.env.GITHUB_TOKEN && process.env.GITHUB_REPOSITORY);
+  
   return NextResponse.json({
     message: "使用 POST 方法触发搜索",
     required_fields: ["query"],
-    optional_fields: ["workspace_id", "max_rounds", "include_scraping", "callback_url"]
+    optional_fields: ["workspace_id", "max_rounds", "include_scraping", "callback_url"],
+    environment_configured: envConfigured,
+    github_token_exists: !!process.env.GITHUB_TOKEN,
+    github_repository: process.env.GITHUB_REPOSITORY || null
   });
 }
