@@ -34,4 +34,4 @@ jobs:
           QUERY: ${{ github.event.inputs.query }}
           CALLBACK_URL: ${{ github.event.inputs.callback_url }}
         run: |
-          python src/gh_action_runner.py
+          python src/simple_runner.py
