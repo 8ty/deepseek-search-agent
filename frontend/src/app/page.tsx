@@ -20,6 +20,13 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [debugMode, setDebugMode] = useState<boolean>(false);
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
+  
+  // GitHub Actions 配置状态
+  const [showGitHubConfig, setShowGitHubConfig] = useState<boolean>(false);
+  const [githubToken, setGithubToken] = useState<string>('');
+  const [githubRepository, setGithubRepository] = useState<string>('');
+  const [enableGitHubActions, setEnableGitHubActions] = useState<boolean>(false);
+  
   const router = useRouter();
 
   // 从 localStorage 加载 debug 模式设置
@@ -81,7 +88,13 @@ export default function Home() {
         search_id: searchId, // 保持向后兼容
         callback_url: callbackUrl,
         max_rounds: 5,
-        include_scraping: true
+        include_scraping: true,
+        // GitHub Actions 配置（如果启用）
+        github_config: enableGitHubActions ? {
+          token: githubToken,
+          repository: githubRepository,
+          force_trigger: true // 强制触发，即使在开发环境
+        } : null
       };
 
       logDebugInfo({
@@ -169,6 +182,63 @@ export default function Home() {
             </button>
           </div>
         )}
+
+        {/* GitHub Actions 配置面板 */}
+        <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-medium text-blue-800">⚡ GitHub Actions 测试</h4>
+            <button
+              onClick={() => setShowGitHubConfig(!showGitHubConfig)}
+              className="text-xs text-blue-600 hover:text-blue-500"
+            >
+              {showGitHubConfig ? '隐藏配置' : '显示配置'}
+            </button>
+          </div>
+          
+          <div className="flex items-center mb-3">
+            <input
+              type="checkbox"
+              checked={enableGitHubActions}
+              onChange={(e) => setEnableGitHubActions(e.target.checked)}
+              className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <label className="text-sm text-blue-700">
+              启用 GitHub Actions（触发真实搜索）
+            </label>
+          </div>
+
+          {showGitHubConfig && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  GitHub Token:
+                </label>
+                <input
+                  type="password"
+                  value={githubToken}
+                  onChange={(e) => setGithubToken(e.target.value)}
+                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                  className="w-full text-xs p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Repository (用户名/仓库名):
+                </label>
+                <input
+                  type="text"
+                  value={githubRepository}
+                  onChange={(e) => setGithubRepository(e.target.value)}
+                  placeholder="username/deepseek-search-agent"
+                  className="w-full text-xs p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div className="text-xs text-gray-600">
+                💡 提示：需要有仓库的 Actions 权限才能触发 GitHub Actions
+              </div>
+            </div>
+          )}
+        </div>
 
         <form onSubmit={handleSubmit} className="mt-5">
           <div className="flex flex-col sm:flex-row">

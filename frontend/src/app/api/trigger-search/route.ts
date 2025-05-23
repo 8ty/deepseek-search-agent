@@ -25,6 +25,15 @@ export async function POST(request: NextRequest) {
     // 生成ID（如果没有提供的话）
     const searchId = body.search_id || `search-${Date.now()}`;
     const workspaceId = body.workspace_id || `ws-${Date.now()}`;
+    
+    // 获取GitHub配置
+    const githubConfig = body.github_config;
+    const shouldTriggerGitHub = githubConfig?.force_trigger || 
+      (process.env.NODE_ENV === 'production' && process.env.GITHUB_TOKEN);
+    
+    // 使用用户提供的配置或环境变量
+    const githubToken = githubConfig?.token || process.env.GITHUB_TOKEN;
+    const githubRepository = githubConfig?.repository || process.env.GITHUB_REPOSITORY;
 
     // 初始化搜索数据
     const searchData = {
@@ -60,21 +69,21 @@ export async function POST(request: NextRequest) {
       callback_url: body.callback_url || `${process.env.NEXT_PUBLIC_BASE_URL}/api/webhook`
     };
 
-    // 触发 GitHub Actions（如果在生产环境）
+    // 触发 GitHub Actions（如果配置了Token和Repository）
     console.log('=== GITHUB ACTIONS DEBUG ===');
-    console.log('NODE_ENV:', process.env.NODE_ENV);
-    console.log('GITHUB_TOKEN exists:', !!process.env.GITHUB_TOKEN);
-    console.log('GITHUB_REPOSITORY:', process.env.GITHUB_REPOSITORY);
+    console.log('Should trigger GitHub:', shouldTriggerGitHub);
+    console.log('GitHub Token exists:', !!githubToken);
+    console.log('GitHub Repository:', githubRepository);
     console.log('=== END GITHUB ACTIONS DEBUG ===');
     
-    if (process.env.NODE_ENV === 'production' && process.env.GITHUB_TOKEN) {
+    if (shouldTriggerGitHub && githubToken && githubRepository) {
       try {
         const githubResponse = await fetch(
-          `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/dispatches`,
+          `https://api.github.com/repos/${githubRepository}/dispatches`,
           {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
+              'Authorization': `Bearer ${githubToken}`,
               'Accept': 'application/vnd.github.v3+json',
               'Content-Type': 'application/json'
             },
@@ -86,7 +95,10 @@ export async function POST(request: NextRequest) {
         );
 
         if (!githubResponse.ok) {
-          console.error('GitHub Actions 触发失败:', await githubResponse.text());
+          const errorText = await githubResponse.text();
+          console.error('GitHub Actions 触发失败:', errorText);
+        } else {
+          console.log('✅ GitHub Actions 触发成功!');
         }
       } catch (error) {
         console.error('GitHub Actions 触发出错:', error);
