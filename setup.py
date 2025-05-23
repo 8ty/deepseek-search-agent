@@ -28,7 +28,7 @@ setup(
     author="DeepSeek Search Agent Developer",
     author_email="admin@example.com",
     url="https://github.com/your-username/deepseek-search-agent",
-    packages=find_packages(include=["src", "src.*"]),
+    packages=find_packages(include=["src", "src.*", "api", "api.*", "config", "config.*"]),
     package_dir={"": "."},
     py_modules=["deepseek_r1_search_agent"],
     python_requires=">=3.9",

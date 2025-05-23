@@ -778,8 +778,22 @@ async def main():
     runner = GitHubRunner()
     
     # 检查和验证环境
-    print("🚀 DeepSeek 搜索代理 - GitHub Runner")
-    print("=" * 50)
+    print("🚀 启动 DeepSeek 搜索代理")
+    
+    # 从 GitHub Actions 环境变量获取参数
+    query = os.getenv("QUERY")
+    callback_url = os.getenv("CALLBACK_URL")
+    max_rounds = int(os.getenv("MAX_ROUNDS", "5"))
+    include_scraping = os.getenv("INCLUDE_SCRAPING", "true").lower() == "true"
+    workspace_id = os.getenv("WORKSPACE_ID", f"ws-{int(datetime.now().timestamp() * 1000)}")
+    environment = os.getenv("ENVIRONMENT", "production")
+    
+    print(f"📋 搜索查询: {query}")
+    print(f"📞 回调 URL: {callback_url}")
+    print(f"🏠 工作空间: {workspace_id}")
+    print(f"🔄 最大轮数: {max_rounds}")
+    print(f"🔧 包含抓取: {include_scraping}")
+    print(f"🌍 环境: {environment}")
     
     runner.check_environment()
     
@@ -792,36 +806,30 @@ async def main():
     
     print("✅ 环境验证通过")
     
-    # 确定运行模式
-    search_query = os.getenv("SEARCH_QUERY")
+    if not query:
+        print("❌ 缺少搜索查询参数 (QUERY)")
+        sys.exit(1)
     
-    if search_query:
-        # 环境变量模式
-        print("🔧 使用环境变量模式")
-        result = await runner.run_from_env()
-    else:
-        # 命令行参数模式
-        if len(sys.argv) < 2:
-            print("❌ 缺少搜索查询参数")
-            print("用法: python -m api.github_runner \"搜索查询\"")
-            print("或设置环境变量: SEARCH_QUERY")
-            sys.exit(1)
+    try:
+        # 执行搜索
+        result = await runner.run_iterative_search(query, callback_url, max_rounds)
         
-        query = " ".join(sys.argv[1:])
-        print(f"💻 使用命令行模式: {query}")
-        result = await runner.run_iterative_search(query)
-    
-    # 输出结果
-    print("\n" + "=" * 50)
-    print("📋 执行结果:")
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-    
-    # 设置退出码
-    if result.get("is_complete", False) or (not result.get("error")):
-        print("✅ 执行成功")
-        sys.exit(0)
-    else:
-        print("❌ 执行失败")
+        # 输出结果
+        print("\n" + "=" * 50)
+        print("📋 执行结果:")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        
+        # 设置退出码
+        if result.get("is_complete", False) or (not result.get("error")):
+            print("✅ 执行成功")
+            sys.exit(0)
+        else:
+            print("❌ 执行失败")
+            sys.exit(1)
+            
+    except Exception as e:
+        print(f"❌ 执行过程中发生错误: {str(e)}")
+        print(traceback.format_exc())
         sys.exit(1)
 
 

@@ -27,4 +27,4 @@ jobs:
           CALLBACK_URL: ${{ github.event.client_payload.callback_url }}
           JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: python -m src.gh_action_runner
+        run: python -m api.github_runner
