@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-// 与trigger-search共享的内存存储
-const memoryStore: Record<string, any> = {};
+import memoryStorage from '../../../../lib/storage';
 
 // 注意：在生产环境中应该使用真实的数据库或KV存储
-// 目前使用内存存储进行演示
+// 目前使用共享内存存储进行演示
 
 export async function GET(
   request: NextRequest,
@@ -32,11 +30,11 @@ export async function GET(
     console.log('Search ID:', searchId);
     console.log('Workspace ID:', workspaceId);
     console.log('Memory Store Key:', `search:${searchId}`);
-    console.log('Current memory store keys:', Object.keys(memoryStore));
-    console.log('All memory store data:', memoryStore);
+    console.log('Current memory store keys:', memoryStorage.keys());
+    console.log('All memory store data:', 'Available keys: ' + memoryStorage.keys().join(', '));
 
-    // 使用内存存储
-    searchData = memoryStore[`search:${searchId}`];
+    // 使用共享存储
+    searchData = memoryStorage.get(`search:${searchId}`);
     
     console.log('Retrieved data:', searchData);
     console.log('=== END SEARCH STATUS DEBUG ===');
