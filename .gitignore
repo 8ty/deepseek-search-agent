@@ -8,3 +8,6 @@ config/__pycache__/settings.cpython-310.pyc
 
 frontend/node_modules
 frontend/.next
+api/__pycache__/
+agent/__pycache__/
+config/__pycache__
