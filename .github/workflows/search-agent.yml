@@ -21,10 +21,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
-      - name: Run search agent
+      - name: Test main function execution
         env:
           QUERY: ${{ github.event.client_payload.query }}
           CALLBACK_URL: ${{ github.event.client_payload.callback_url }}
           JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: python -m api.github_runner
+        run: python test_main.py
