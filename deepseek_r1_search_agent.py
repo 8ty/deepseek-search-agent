@@ -629,22 +629,64 @@ print(agent.workspace.to_string())
 
 """### Iteration One"""
 
-await agent.run(loop=False)
+# await agent.run(loop=False)
 
-agent.workspace.to_string()
+# agent.workspace.to_string()
 
 """### Iteration Two"""
 
-await agent.run(loop=False)
+# await agent.run(loop=False)
 
-agent.workspace.to_string()
+# agent.workspace.to_string()
 
 """### Iteration Three"""
 
-await agent.run(loop=False)
+# await agent.run(loop=False)
 
-agent.workspace.to_string()
+# agent.workspace.to_string()
 
 """### And So On..."""
 
-await agent.run(loop=False)
+# await agent.run(loop=False)
+
+def main():
+    """主函数，用于命令行入口"""
+    import sys
+    
+    if len(sys.argv) > 1:
+        task = " ".join(sys.argv[1:])
+    else:
+        task = """
+        Help me plan a 3 day holiday in Europe in May for under 2000 EURO.
+        1. I need specific flight and hotel recommendations.
+        2. I want the destination to be warm.
+        3. I want to have a beach nearby the hotel.
+        I live in Germany.
+        """
+    
+    agent = Agent(task=task, prompt=prompt)
+    
+    async def run_agent():
+        print("启动 DeepSeek 搜索代理...")
+        print(f"任务: {task}")
+        print("-" * 50)
+        
+        try:
+            result = await agent.run(max_rounds=10)
+            print("\n" + "="*50)
+            print("任务完成!")
+            print("="*50)
+            print(agent.workspace.to_string())
+            return result
+        except KeyboardInterrupt:
+            print("\n用户中断了程序")
+            return agent.workspace.state
+        except Exception as e:
+            print(f"\n错误: {e}")
+            return None
+    
+    # 运行异步函数
+    return asyncio.run(run_agent())
+
+if __name__ == "__main__":
+    main()
