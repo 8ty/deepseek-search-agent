@@ -1,2 +1,6 @@
-frontend/node_modules
-frontend/.next
+agent/__pycache__/__init__.cpython-310.pyc
+agent/__pycache__/search_agent.cpython-310.pyc
+api/__pycache__/search_api.cpython-310.pyc
+api/__pycache__/__init__.cpython-310.pyc
+config/__pycache__/__init__.cpython-310.pyc
+config/__pycache__/settings.cpython-310.pyc

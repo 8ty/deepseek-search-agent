@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional, TypedDict
 from urllib.parse import quote_plus
 import aiohttp
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from jinja2 import BaseLoader, Environment
 
 # Set your API keys here
 os.environ["JINA_API_KEY"] = "your_jina_api_key"
@@ -77,6 +78,33 @@ async def rerank(text: str, query: str, top_docs: int = 5, split_fn: Callable[[s
             results = [result["document"]["text"] for result in data["results"]]
             merged_text = merge_fn(results)
             return merged_text
+
+class Prompt:
+    def __init__(self, template: str) -> None:
+        self.template = template
+        self.env = Environment(loader=BaseLoader())
+
+    def __call__(self, **variables) -> str:
+        prompt_template = self.env.from_string(self.template)
+        prompt = prompt_template.render(**variables)
+        prompt = prompt.strip()
+        return prompt
+
+    async def run(
+        self,
+        prompt_variables: Dict[str, Any] = {},
+        generation_args: Dict[str, Any] = {},
+    ) -> str:
+        model = OpenRouterModel(api_key=os.environ.get("OPENROUTER_API_KEY"))
+        prompt = self(**prompt_variables)
+        print(f"\nPrompt:\n{prompt}")
+        try:
+            result = await model(prompt)
+            print(f"\nResult:\n{result}")
+            return result
+        except Exception as e:
+            print(e)
+            raise
 
 class SearchResult(TypedDict):
     url: str

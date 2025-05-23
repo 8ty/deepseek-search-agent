@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import asyncio
 import aiohttp
@@ -6,10 +7,21 @@ import traceback
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
+# 添加当前目录到 Python 路径，以便导入本地模块
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 # 导入必要的模块
-from classes.workspace import Workspace
-from classes.tools import SearchTool, ScrapTool
-from classes.prompt import Prompt
+try:
+    from classes.workspace import Workspace
+    from classes.tools import SearchTool, ScrapTool
+    from classes.prompt import Prompt
+    from utils.text_processing import extract_largest_json
+except ImportError:
+    # 如果相对导入失败，尝试绝对导入
+    from .classes.workspace import Workspace
+    from .classes.tools import SearchTool, ScrapTool
+    from .classes.prompt import Prompt
+    from .utils.text_processing import extract_largest_json
 
 class GithubActionAgent:
     # 初始化搜索和抓取工具
@@ -89,7 +101,6 @@ class GithubActionAgent:
                 )
                 
                 # 提取JSON响应
-                from utils.text_processing import extract_largest_json
                 response_json = extract_largest_json(response)
                 
                 if not response_json:
@@ -317,7 +328,6 @@ async def main():
     os.environ["OPENROUTER_API_KEY"] = openrouter_api_key
     
     # 初始化提示模板
-    from classes.prompt import Prompt
     prompt_template = load_prompt_template()
     prompt = Prompt(prompt_template)
     

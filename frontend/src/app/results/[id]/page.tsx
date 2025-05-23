@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import React, { useEffect, useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 
@@ -30,18 +30,72 @@ interface SearchData {
   error?: string;
 }
 
+// 定义 Debug 信息类型
+interface DebugLogEntry {
+  action: string;
+  [key: string]: any;
+}
+
+interface DebugInfo {
+  [timestamp: string]: DebugLogEntry;
+}
+
 export default function ResultPage() {
   const { id } = useParams() as { id: string };
+  const searchParams = useSearchParams();
+  const workspaceId = searchParams.get('workspace_id');
+  
   const [searchData, setSearchData] = useState<SearchData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [pollingInterval, setPollingInterval] = useState<ReturnType<typeof setInterval> | null>(null);
   const [activeIteration, setActiveIteration] = useState<number | null>(null);
+  const [debugMode, setDebugMode] = useState<boolean>(false);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
+
+  // 从 localStorage 加载 debug 模式设置
+  useEffect(() => {
+    const savedDebugMode = localStorage.getItem('deepseek-debug-mode');
+    if (savedDebugMode === 'true') {
+      setDebugMode(true);
+    }
+  }, []);
+
+  const logDebugInfo = (info: DebugLogEntry) => {
+    if (debugMode) {
+      const timestamp = new Date().toISOString();
+      setDebugInfo((prev: DebugInfo | null) => ({
+        ...(prev || {}),
+        [`${timestamp}`]: info
+      }));
+      console.log('[DEBUG]', timestamp, info);
+    }
+  };
 
   // 获取搜索状态
   const fetchSearchStatus = async () => {
     try {
-      const response = await axios.get(`/api/search-status/${id}`);
+      // 构建请求URL，包含 workspace_id（如果有的话）
+      let url = `/api/search-status/${id}`;
+      if (workspaceId) {
+        url += `?workspace_id=${workspaceId}`;
+      }
+
+      logDebugInfo({
+        action: 'fetch_status',
+        url,
+        searchId: id,
+        workspaceId
+      });
+
+      const response = await axios.get(url);
+      
+      logDebugInfo({
+        action: 'status_response',
+        status: response.status,
+        data: response.data
+      });
+
       setSearchData(response.data);
 
       // 如果搜索已完成或失败，停止轮询
@@ -54,6 +108,15 @@ export default function ResultPage() {
 
       setLoading(false);
     } catch (err: any) {
+      logDebugInfo({
+        action: 'fetch_error',
+        error: {
+          message: err.message,
+          response: err.response?.data,
+          status: err.response?.status
+        }
+      });
+
       setError(err.response?.data?.error || '获取搜索状态失败');
       setLoading(false);
 
@@ -79,7 +142,7 @@ export default function ResultPage() {
         clearInterval(pollingInterval);
       }
     };
-  }, [id]);
+  }, [id, workspaceId]); // 添加 workspaceId 依赖
 
   // 渲染状态标签
   const renderStatusBadge = (status: SearchStatus) => {
@@ -205,6 +268,48 @@ export default function ResultPage() {
 
   return (
     <div className="bg-white shadow sm:rounded-lg p-6">
+      {/* Debug 信息面板 */}
+      {debugMode && (
+        <div className="mb-6 p-4 bg-gray-100 rounded-lg">
+          <div className="flex justify-between items-start mb-2">
+            <h4 className="text-sm font-medium text-gray-700">🐛 Debug 信息</h4>
+            <button
+              onClick={() => {
+                const debugData = {
+                  searchId: id,
+                  workspaceId,
+                  searchData,
+                  debugLogs: debugInfo
+                };
+                navigator.clipboard.writeText(JSON.stringify(debugData, null, 2));
+                alert('Debug 信息已复制到剪贴板');
+              }}
+              className="text-xs text-indigo-600 hover:text-indigo-500"
+            >
+              📋 复制 Debug 信息
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-4 text-xs">
+            <div>
+              <strong>Search ID:</strong> {id}
+            </div>
+            <div>
+              <strong>Workspace ID:</strong> {workspaceId || '未设置'}
+            </div>
+          </div>
+          {debugInfo && (
+            <div className="mt-2">
+              <details className="text-xs">
+                <summary className="cursor-pointer text-gray-600">查看详细日志</summary>
+                <pre className="mt-2 text-gray-600 overflow-auto max-h-40 bg-white p-2 rounded">
+                  {JSON.stringify(debugInfo, null, 2)}
+                </pre>
+              </details>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 搜索信息头部 */}
       <div className="border-b pb-4 mb-6">
         <div className="flex justify-between items-start">
@@ -212,11 +317,11 @@ export default function ResultPage() {
             <h2 className="text-xl font-bold text-gray-900 mb-2">
               搜索查询
             </h2>
-            <p className="text-gray-700">{searchData.query}</p>
+            <p className="text-gray-700">{searchData?.query}</p>
             <div className="mt-2">
-              {renderStatusBadge(searchData.status)}
+              {searchData && renderStatusBadge(searchData.status)}
               <span className="text-sm text-gray-500 ml-2">
-                {new Date(searchData.createdAt).toLocaleString()}
+                {searchData?.createdAt && new Date(searchData.createdAt).toLocaleString()}
               </span>
             </div>
           </div>
@@ -259,7 +364,7 @@ export default function ResultPage() {
           <div className="text-gray-500">尚无迭代数据</div>
         ) : (
           <div className="space-y-6">
-            {searchData.iterations.map((iteration, index) => (
+            {searchData.iterations.map((iteration: Iteration, index: number) => (
               <div key={index} className="border rounded-lg overflow-hidden">
                 <div
                   className="p-4 bg-gray-50 border-b cursor-pointer flex justify-between items-center"

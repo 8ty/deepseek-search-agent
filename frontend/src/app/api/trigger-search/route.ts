@@ -1,61 +1,124 @@
-import { NextResponse } from 'next/server';
-import axios from 'axios';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(request: Request) {
+// 引用与search-status相同的内存存储
+const memoryStore: Record<string, any> = {};
+
+// 注意：在生产环境中应该使用真实的数据库或KV存储
+// 目前使用内存存储进行演示
+
+// 注意：在生产环境中，这些 API 路由应该代理到后端服务
+// 这里只是为了演示新架构的接口
+
+export async function POST(request: NextRequest) {
   try {
-    const { query, callbackUrl, searchId } = await request.json();
-
-    if (!query || !callbackUrl || !searchId) {
+    const body = await request.json();
+    
+    // 验证请求数据
+    if (!body.query) {
       return NextResponse.json(
-        { error: 'Missing required parameters' },
+        { 
+          error: "查询参数缺失",
+          code: "MISSING_QUERY" 
+        },
         { status: 400 }
       );
     }
 
-    // 获取GitHub仓库信息和令牌
-    const repo = process.env.REPOSITORY; // 格式: owner/repo
-    const token = process.env.GITHUB_TOKEN;
+    // 生成ID（如果没有提供的话）
+    const searchId = body.search_id || `search-${Date.now()}`;
+    const workspaceId = body.workspace_id || `ws-${Date.now()}`;
 
-    if (!repo || !token) {
-      return NextResponse.json(
-        { error: 'Missing repository configuration' },
-        { status: 500 }
-      );
+    // 初始化搜索数据
+    const searchData = {
+      status: 'pending' as const,
+      query: body.query,
+      createdAt: new Date().toISOString(),
+      iterations: [],
+      result: null,
+      workspace_id: workspaceId,
+      search_id: searchId
+    };
+
+    // 存储搜索数据
+    console.log('=== TRIGGER SEARCH DEBUG ===');
+    console.log('Search ID:', searchId);
+    console.log('Workspace ID:', workspaceId);
+    console.log('Search Data:', searchData);
+    console.log('Memory Store Key:', `search:${searchId}`);
+    
+    memoryStore[`search:${searchId}`] = searchData;
+    
+    console.log('Data stored. Current memory store keys:', Object.keys(memoryStore));
+    console.log('Stored data verification:', memoryStore[`search:${searchId}`]);
+    console.log('=== END TRIGGER SEARCH DEBUG ===');
+
+    // 准备 Webhook 数据
+    const webhookData = {
+      query: body.query,
+      workspace_id: workspaceId,
+      search_id: searchId,
+      max_rounds: body.max_rounds || 5,
+      include_scraping: body.include_scraping !== false,
+      callback_url: body.callback_url || `${process.env.NEXT_PUBLIC_BASE_URL}/api/webhook`
+    };
+
+    // 在生产环境中，这里应该调用 GitHub Actions 或后端服务
+    // 目前返回模拟响应
+    const response = {
+      status: "search_initiated",
+      message: "搜索已开始，结果将通过回调发送",
+      query: body.query,
+      workspace_id: workspaceId,
+      search_id: searchId,
+      timestamp: new Date().toISOString()
+    };
+
+    // 触发 GitHub Actions（如果在生产环境）
+    if (process.env.NODE_ENV === 'production' && process.env.GITHUB_TOKEN) {
+      try {
+        const githubResponse = await fetch(
+          `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/dispatches`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
+              'Accept': 'application/vnd.github.v3+json',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              event_type: 'search_trigger',
+              client_payload: webhookData
+            })
+          }
+        );
+
+        if (!githubResponse.ok) {
+          console.error('GitHub Actions 触发失败:', await githubResponse.text());
+        }
+      } catch (error) {
+        console.error('GitHub Actions 触发出错:', error);
+      }
     }
 
-    // 触发GitHub Actions工作流
-    const response = await axios({
-      method: 'POST',
-      url: `https://api.github.com/repos/${repo}/dispatches`,
-      headers: {
-        'Accept': 'application/vnd.github.everest-preview+json',
-        'Authorization': `token ${token}`,
-        'Content-Type': 'application/json'
-      },
-      data: {
-        event_type: 'search-request',
-        client_payload: {
-          query,
-          callback_url: callbackUrl
-        }
-      }
-    });
+    return NextResponse.json(response);
 
-    // 将搜索信息存储到数据库或缓存中
-    // 在生产环境中，你应该使用数据库或Redis等存储搜索状态
-    // 这里我们简化实现，仅作演示
-
-    return NextResponse.json({
-      success: true,
-      searchId,
-      message: 'Search request triggered'
-    });
   } catch (error) {
-    console.error('Error triggering GitHub Actions:', error);
-
+    console.error('触发搜索失败:', error);
     return NextResponse.json(
-      { error: 'Failed to trigger search' },
+      { 
+        error: "启动搜索失败",
+        code: "SEARCH_INIT_FAILED",
+        details: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     );
   }
+}
+
+export async function GET() {
+  return NextResponse.json({
+    message: "使用 POST 方法触发搜索",
+    required_fields: ["query"],
+    optional_fields: ["workspace_id", "max_rounds", "include_scraping", "callback_url"]
+  });
 }
