@@ -1,16 +1,10 @@
 import { NextResponse } from 'next/server';
 
-// 内存存储，用于演示目的或当Vercel KV不可用时
+// 与其他API共享的内存存储
 const memoryStore: Record<string, any> = {};
 
-// 尝试导入Vercel KV，如果不可用则使用内存存储
-let kv: any;
-try {
-  kv = require('@vercel/kv');
-} catch (error) {
-  console.log('Vercel KV not available, using memory storage');
-  // 继续使用内存存储
-}
+// 注意：在生产环境中应该使用真实的数据库或KV存储
+// 目前使用内存存储进行演示
 
 export async function POST(request: Request) {
   try {
@@ -37,19 +31,8 @@ export async function POST(request: Request) {
     // 获取现有的搜索数据
     let existingData: any = null;
 
-    // 如果Vercel KV可用，尝试从KV获取数据
-    if (kv) {
-      try {
-        existingData = await kv.get(`search:${searchId}`);
-      } catch (kvError) {
-        console.error('Error retrieving data from KV:', kvError);
-        // 回退到内存存储
-        existingData = memoryStore[`search:${searchId}`];
-      }
-    } else {
-      // 使用内存存储
-      existingData = memoryStore[`search:${searchId}`];
-    }
+    // 使用内存存储
+    existingData = memoryStore[`search:${searchId}`];
 
     // 初始化或更新搜索数据
     const searchData = existingData || {
@@ -93,18 +76,7 @@ export async function POST(request: Request) {
     }
 
     // 保存更新的数据
-    if (kv) {
-      try {
-        await kv.set(`search:${searchId}`, searchData);
-      } catch (kvError) {
-        console.error('Error storing data in KV:', kvError);
-        // 回退到内存存储
-        memoryStore[`search:${searchId}`] = searchData;
-      }
-    } else {
-      // 使用内存存储
-      memoryStore[`search:${searchId}`] = searchData;
-    }
+    memoryStore[`search:${searchId}`] = searchData;
 
     return NextResponse.json({
       success: true,

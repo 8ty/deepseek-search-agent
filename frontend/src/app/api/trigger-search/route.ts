@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// 引用与search-status相同的内存存储
+const memoryStore: Record<string, any> = {};
+
+// 注意：在生产环境中应该使用真实的数据库或KV存储
+// 目前使用内存存储进行演示
+
 // 注意：在生产环境中，这些 API 路由应该代理到后端服务
 // 这里只是为了演示新架构的接口
 
@@ -18,10 +24,79 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 生成ID（如果没有提供的话）
+    const searchId = body.search_id || `search-${Date.now()}`;
+    const workspaceId = body.workspace_id || `ws-${Date.now()}`;
+
+    // 初始化搜索数据
+    const searchData = {
+      status: 'pending' as const,
+      query: body.query,
+      createdAt: new Date().toISOString(),
+      iterations: [],
+      result: null,
+      workspace_id: workspaceId,
+      search_id: searchId
+    };
+
+    // 存储搜索数据
+    memoryStore[`search:${searchId}`] = searchData;
+
+    // 模拟搜索过程 - 在几秒后自动完成（仅用于演示）
+    setTimeout(() => {
+      const completedData = {
+        ...searchData,
+        status: 'completed' as const,
+        result: `针对查询"${body.query}"的模拟搜索结果：
+
+这是一个自动生成的演示结果。在实际部署中，这里会是来自DeepSeek R1模型的真实搜索和分析结果。
+
+**查询分析：**
+您的问题：${body.query}
+
+**搜索策略：**
+1. 关键词提取和分析
+2. 多源信息搜索
+3. 结果综合和验证
+4. 个性化回答生成
+
+**模拟结果：**
+基于您的查询，我已经完成了相关信息的搜索和分析。这是一个演示版本的回答，实际版本会包含更详细和准确的信息。`,
+        iterations: [
+          {
+            round: 1,
+            timestamp: new Date().toISOString(),
+            workspace_state: 'Status: Processing\n<search-1>正在分析用户查询</search-1>',
+            tool_calls: [
+              {
+                tool: 'search',
+                input: body.query,
+                output: '找到相关信息...'
+              }
+            ]
+          },
+          {
+            round: 2,
+            timestamp: new Date().toISOString(),
+            workspace_state: 'Status: Completed\n<result-1>搜索完成，已生成回答</result-1>',
+            tool_calls: [
+              {
+                tool: 'analyze',
+                input: '分析搜索结果',
+                output: '分析完成，生成最终答案'
+              }
+            ]
+          }
+        ]
+      };
+      memoryStore[`search:${searchId}`] = completedData;
+    }, 3000); // 3秒后完成
+
     // 准备 Webhook 数据
     const webhookData = {
       query: body.query,
-      workspace_id: body.workspace_id,
+      workspace_id: workspaceId,
+      search_id: searchId,
       max_rounds: body.max_rounds || 5,
       include_scraping: body.include_scraping !== false,
       callback_url: body.callback_url || `${process.env.NEXT_PUBLIC_BASE_URL}/api/webhook`
@@ -33,8 +108,8 @@ export async function POST(request: NextRequest) {
       status: "search_initiated",
       message: "搜索已开始，结果将通过回调发送",
       query: body.query,
-      workspace_id: webhookData.workspace_id || `ws-${Date.now()}`,
-      search_id: `search-${Date.now()}`,
+      workspace_id: workspaceId,
+      search_id: searchId,
       timestamp: new Date().toISOString()
     };
 
