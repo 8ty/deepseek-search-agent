@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-// 引用与search-status相同的内存存储
-const memoryStore: Record<string, any> = {};
+import memoryStorage from '../../../lib/storage';
 
 // 注意：在生产环境中应该使用真实的数据库或KV存储
-// 目前使用内存存储进行演示
+// 目前使用共享内存存储进行演示
 
 // 注意：在生产环境中，这些 API 路由应该代理到后端服务
 // 这里只是为了演示新架构的接口
@@ -46,10 +44,10 @@ export async function POST(request: NextRequest) {
     console.log('Search Data:', searchData);
     console.log('Memory Store Key:', `search:${searchId}`);
     
-    memoryStore[`search:${searchId}`] = searchData;
+    memoryStorage.set(`search:${searchId}`, searchData);
     
-    console.log('Data stored. Current memory store keys:', Object.keys(memoryStore));
-    console.log('Stored data verification:', memoryStore[`search:${searchId}`]);
+    console.log('Data stored. Current memory store keys:', memoryStorage.keys());
+    console.log('Stored data verification:', memoryStorage.get(`search:${searchId}`));
     console.log('=== END TRIGGER SEARCH DEBUG ===');
 
     // 准备 Webhook 数据
