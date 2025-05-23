@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
-
-// 与其他API共享的内存存储
-const memoryStore: Record<string, any> = {};
+import memoryStorage from '../../../lib/storage';
 
 // 注意：在生产环境中应该使用真实的数据库或KV存储
-// 目前使用内存存储进行演示
+// 目前使用共享内存存储进行演示
 
 export async function POST(request: Request) {
   try {
@@ -32,7 +30,7 @@ export async function POST(request: Request) {
     let existingData: any = null;
 
     // 使用内存存储
-    existingData = memoryStore[`search:${searchId}`];
+    existingData = memoryStorage[`search:${searchId}`];
 
     // 初始化或更新搜索数据
     const searchData = existingData || {
@@ -76,7 +74,7 @@ export async function POST(request: Request) {
     }
 
     // 保存更新的数据
-    memoryStore[`search:${searchId}`] = searchData;
+    memoryStorage[`search:${searchId}`] = searchData;
 
     return NextResponse.json({
       success: true,
