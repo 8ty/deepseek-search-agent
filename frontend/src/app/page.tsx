@@ -80,7 +80,7 @@ export default function Home() {
         workspace_id: workspaceId,
         search_id: searchId, // 保持向后兼容
         callback_url: callbackUrl,
-        max_results: 10,
+        max_rounds: 5,
         include_scraping: true
       };
 

@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     const webhookData = {
       query: body.query,
       workspace_id: body.workspace_id,
-      max_results: body.max_results || 10,
+      max_rounds: body.max_rounds || 5,
       include_scraping: body.include_scraping !== false,
       callback_url: body.callback_url || `${process.env.NEXT_PUBLIC_BASE_URL}/api/webhook`
     };
@@ -84,6 +84,6 @@ export async function GET() {
   return NextResponse.json({
     message: "使用 POST 方法触发搜索",
     required_fields: ["query"],
-    optional_fields: ["workspace_id", "max_results", "include_scraping", "callback_url"]
+    optional_fields: ["workspace_id", "max_rounds", "include_scraping", "callback_url"]
   });
 }
