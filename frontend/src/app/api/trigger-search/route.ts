@@ -42,56 +42,6 @@ export async function POST(request: NextRequest) {
     // 存储搜索数据
     memoryStore[`search:${searchId}`] = searchData;
 
-    // 模拟搜索过程 - 在几秒后自动完成（仅用于演示）
-    setTimeout(() => {
-      const completedData = {
-        ...searchData,
-        status: 'completed' as const,
-        result: `针对查询"${body.query}"的模拟搜索结果：
-
-这是一个自动生成的演示结果。在实际部署中，这里会是来自DeepSeek R1模型的真实搜索和分析结果。
-
-**查询分析：**
-您的问题：${body.query}
-
-**搜索策略：**
-1. 关键词提取和分析
-2. 多源信息搜索
-3. 结果综合和验证
-4. 个性化回答生成
-
-**模拟结果：**
-基于您的查询，我已经完成了相关信息的搜索和分析。这是一个演示版本的回答，实际版本会包含更详细和准确的信息。`,
-        iterations: [
-          {
-            round: 1,
-            timestamp: new Date().toISOString(),
-            workspace_state: 'Status: Processing\n<search-1>正在分析用户查询</search-1>',
-            tool_calls: [
-              {
-                tool: 'search',
-                input: body.query,
-                output: '找到相关信息...'
-              }
-            ]
-          },
-          {
-            round: 2,
-            timestamp: new Date().toISOString(),
-            workspace_state: 'Status: Completed\n<result-1>搜索完成，已生成回答</result-1>',
-            tool_calls: [
-              {
-                tool: 'analyze',
-                input: '分析搜索结果',
-                output: '分析完成，生成最终答案'
-              }
-            ]
-          }
-        ]
-      };
-      memoryStore[`search:${searchId}`] = completedData;
-    }, 3000); // 3秒后完成
-
     // 准备 Webhook 数据
     const webhookData = {
       query: body.query,
