@@ -32,7 +32,7 @@ export async function GET(
     // 如果Vercel KV可用，优先从KV获取数据
     if (kv) {
       try {
-        searchData = await kv.get<any>(`search:${searchId}`);
+        searchData = await kv.get(`search:${searchId}`) as any;
       } catch (kvError) {
         console.error('Error retrieving data from KV:', kvError);
         // 回退到内存存储
