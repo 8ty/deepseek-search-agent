@@ -17,11 +17,11 @@ on:
         description: '工作空间 ID'
         required: false
         type: string
-      max_results:
-        description: '最大结果数'
+      max_rounds:
+        description: '最大迭代轮数'
         required: false
         type: string
-        default: '10'
+        default: '5'
 
 jobs:
   search:
@@ -51,7 +51,7 @@ jobs:
         SEARCH_QUERY: ${{ github.event.client_payload.query || inputs.query }}
         CALLBACK_URL: ${{ github.event.client_payload.callback_url || inputs.callback_url }}
         WORKSPACE_ID: ${{ github.event.client_payload.workspace_id || inputs.workspace_id }}
-        MAX_RESULTS: ${{ github.event.client_payload.max_results || inputs.max_results }}
+        MAX_ROUNDS: ${{ github.event.client_payload.max_rounds || inputs.max_rounds }}
         INCLUDE_SCRAPING: ${{ github.event.client_payload.include_scraping || 'true' }}
         # GitHub 信息
         GITHUB_REPOSITORY: ${{ github.repository }}
@@ -64,11 +64,11 @@ jobs:
         echo "📋 搜索查询: $SEARCH_QUERY"
         echo "📞 回调 URL: $CALLBACK_URL"
         echo "🏠 工作空间: $WORKSPACE_ID"
-        echo "📊 最大结果: $MAX_RESULTS"
+        echo "🔄 最大轮数: $MAX_ROUNDS"
         echo "🔧 包含抓取: $INCLUDE_SCRAPING"
         echo "🌍 环境: $ENVIRONMENT"
         
-        # 使用新的模块化架构运行搜索代理
+        # 使用新的迭代搜索架构运行搜索代理
         python -m api.github_runner
         
     - name: 📋 输出执行信息
