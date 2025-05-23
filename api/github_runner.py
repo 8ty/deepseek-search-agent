@@ -321,9 +321,6 @@ class Prompt:
 class GitHubSearchAgent:
     """GitHub Actions 搜索代理"""
     
-    # 工具
-    tools = {"search": SearchTool(), "scrape": ScrapTool()}
-
     def __init__(self, task: str, callback_url: str = None, current_date: str = None):
         self.task = task
         self.current_date = current_date or datetime.now().strftime("%Y-%m-%d")
@@ -332,6 +329,9 @@ class GitHubSearchAgent:
         self.workspace = Workspace()
         self.round = 0
         self.iteration_results = []
+
+        # 在初始化时创建工具实例，而不是在类定义时
+        self.tools = {"search": SearchTool(), "scrape": ScrapTool()}
 
         # 创建提示模板
         self.prompt = Prompt(self._get_prompt_template())
