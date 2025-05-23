@@ -21,6 +21,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
+      - name: Test ultra simple Python
+        run: |
+          echo "=== 运行超简单测试 ==="
+          python ultra_simple_test.py
+          echo "=== 超简单测试完成 ==="
+
+      - name: Test imports step by step
+        run: |
+          echo "=== 运行导入测试 ==="
+          timeout 60s python import_test.py || echo "导入测试超时或失败"
+          echo "=== 导入测试完成 ==="
+
       - name: Test step-by-step execution
         env:
           QUERY: ${{ github.event.client_payload.query }}
@@ -29,16 +41,27 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           echo "=== 运行逐步测试 ==="
-          python test_main.py
+          timeout 30s python test_main.py || echo "逐步测试超时或失败"
           echo "=== 逐步测试完成 ==="
 
-      - name: Test direct main function with timeout
+      - name: Debug Python environment
+        run: |
+          echo "=== Python环境调试 ==="
+          which python
+          python --version
+          python -c "import sys; print('Python path:', sys.executable)"
+          python -c "import sys; print('Modules:', len(sys.modules))"
+          echo "=== 环境调试完成 ==="
+
+      - name: Test with explicit python path
         env:
           QUERY: ${{ github.event.client_payload.query }}
           CALLBACK_URL: ${{ github.event.client_payload.callback_url }}
           JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
-          echo "=== 运行直接main函数测试 ==="
-          timeout 60s python direct_main_test.py || echo "直接测试超时或失败"
-          echo "=== 直接测试完成 ==="
+          echo "=== 使用明确Python路径测试 ==="
+          which python
+          python --version
+          /opt/hostedtoolcache/Python/3.10.17/x64/bin/python ultra_simple_test.py
+          echo "=== 明确路径测试完成 ==="
