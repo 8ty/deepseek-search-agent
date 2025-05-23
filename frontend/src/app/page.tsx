@@ -55,8 +55,8 @@ export default function Home() {
       const result = await response.json();
       
       if (response.ok) {
-        // 跳转到结果页面
-        window.location.href = `/results/${result.search_id}`;
+        // 跳转到结果页面，包含workspace_id参数
+        window.location.href = `/results/${result.search_id}?workspace_id=${result.workspace_id}`;
       } else {
         alert(`搜索失败: ${result.error}`);
       }
