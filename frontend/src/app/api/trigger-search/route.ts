@@ -60,18 +60,13 @@ export async function POST(request: NextRequest) {
       callback_url: body.callback_url || `${process.env.NEXT_PUBLIC_BASE_URL}/api/webhook`
     };
 
-    // 在生产环境中，这里应该调用 GitHub Actions 或后端服务
-    // 目前返回模拟响应
-    const response = {
-      status: "search_initiated",
-      message: "搜索已开始，结果将通过回调发送",
-      query: body.query,
-      workspace_id: workspaceId,
-      search_id: searchId,
-      timestamp: new Date().toISOString()
-    };
-
     // 触发 GitHub Actions（如果在生产环境）
+    console.log('=== GITHUB ACTIONS DEBUG ===');
+    console.log('NODE_ENV:', process.env.NODE_ENV);
+    console.log('GITHUB_TOKEN exists:', !!process.env.GITHUB_TOKEN);
+    console.log('GITHUB_REPOSITORY:', process.env.GITHUB_REPOSITORY);
+    console.log('=== END GITHUB ACTIONS DEBUG ===');
+    
     if (process.env.NODE_ENV === 'production' && process.env.GITHUB_TOKEN) {
       try {
         const githubResponse = await fetch(
@@ -96,7 +91,70 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         console.error('GitHub Actions 触发出错:', error);
       }
+    } else {
+      // 开发环境 - 添加模拟搜索完成（用于测试）
+      console.log('Development mode: Adding mock completion in 10 seconds');
+      setTimeout(() => {
+        const completedData = {
+          ...searchData,
+          status: 'completed' as const,
+          result: `**模拟搜索结果** (开发环境)
+
+针对查询："${body.query}"
+
+这是开发环境下的模拟结果。实际部署时，会由GitHub Actions调用DeepSeek R1模型进行真实搜索。
+
+**模拟分析过程：**
+1. 查询分析：已识别关键词
+2. 网络搜索：模拟找到相关资源  
+3. 内容分析：模拟深度分析
+4. 结果综合：生成回答
+
+**下一步：**
+- 部署到生产环境以使用真实的GitHub Actions
+- 配置必要的API密钥 (OPENROUTER_API_KEY, JINA_API_KEY)`,
+          iterations: [
+            {
+              round: 1,
+              timestamp: new Date().toISOString(),
+              workspace_state: 'Status: Processing\n<search-1>正在分析用户查询</search-1>',
+              tool_calls: [
+                {
+                  tool: 'search',
+                  input: body.query,
+                  output: '模拟搜索结果：找到相关网页...'
+                }
+              ]
+            },
+            {
+              round: 2,
+              timestamp: new Date().toISOString(),
+              workspace_state: 'Status: Completed\n<result-1>搜索完成，已生成回答</result-1>',
+              tool_calls: [
+                {
+                  tool: 'analyze',
+                  input: '分析搜索结果',
+                  output: '分析完成，生成最终答案'
+                }
+              ]
+            }
+          ]
+        };
+        memoryStorage.set(`search:${searchId}`, completedData);
+        console.log('Mock search completed for:', searchId);
+      }, 10000); // 10秒后完成
     }
+
+    // 在生产环境中，这里应该调用 GitHub Actions 或后端服务
+    // 目前返回模拟响应
+    const response = {
+      status: "search_initiated",
+      message: "搜索已开始，结果将通过回调发送",
+      query: body.query,
+      workspace_id: workspaceId,
+      search_id: searchId,
+      timestamp: new Date().toISOString()
+    };
 
     return NextResponse.json(response);
 
