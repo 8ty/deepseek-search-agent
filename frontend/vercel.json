@@ -10,8 +10,5 @@
     "GITHUB_TOKEN": {
       "description": "GitHub个人访问令牌，需要有workflow权限"
     }
-  },
-  "buildEnvironment": {
-    "NODE_VERSION": "18.x"
   }
 }
