@@ -40,7 +40,17 @@ export async function POST(request: NextRequest) {
     };
 
     // 存储搜索数据
+    console.log('=== TRIGGER SEARCH DEBUG ===');
+    console.log('Search ID:', searchId);
+    console.log('Workspace ID:', workspaceId);
+    console.log('Search Data:', searchData);
+    console.log('Memory Store Key:', `search:${searchId}`);
+    
     memoryStore[`search:${searchId}`] = searchData;
+    
+    console.log('Data stored. Current memory store keys:', Object.keys(memoryStore));
+    console.log('Stored data verification:', memoryStore[`search:${searchId}`]);
+    console.log('=== END TRIGGER SEARCH DEBUG ===');
 
     // 准备 Webhook 数据
     const webhookData = {

@@ -28,8 +28,18 @@ export async function GET(
     // 获取搜索数据
     let searchData = null;
 
+    console.log('=== SEARCH STATUS DEBUG ===');
+    console.log('Search ID:', searchId);
+    console.log('Workspace ID:', workspaceId);
+    console.log('Memory Store Key:', `search:${searchId}`);
+    console.log('Current memory store keys:', Object.keys(memoryStore));
+    console.log('All memory store data:', memoryStore);
+
     // 使用内存存储
     searchData = memoryStore[`search:${searchId}`];
+    
+    console.log('Retrieved data:', searchData);
+    console.log('=== END SEARCH STATUS DEBUG ===');
 
     if (!searchData) {
       return NextResponse.json(
