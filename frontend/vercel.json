@@ -3,12 +3,5 @@
   "framework": "nextjs",
   "installCommand": "npm install",
   "outputDirectory": ".next",
-  "env": {
-    "REPOSITORY": {
-      "description": "GitHub仓库，格式为：用户名/仓库名"
-    },
-    "GITHUB_TOKEN": {
-      "description": "GitHub个人访问令牌，需要有workflow权限"
-    }
-  }
+  
 }
