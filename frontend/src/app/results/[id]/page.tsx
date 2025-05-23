@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
@@ -30,6 +30,16 @@ interface SearchData {
   error?: string;
 }
 
+// 定义 Debug 信息类型
+interface DebugLogEntry {
+  action: string;
+  [key: string]: any;
+}
+
+interface DebugInfo {
+  [timestamp: string]: DebugLogEntry;
+}
+
 export default function ResultPage() {
   const { id } = useParams() as { id: string };
   const searchParams = useSearchParams();
@@ -38,10 +48,10 @@ export default function ResultPage() {
   const [searchData, setSearchData] = useState<SearchData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [pollingInterval, setPollingInterval] = useState<ReturnType<typeof setInterval> | null>(null);
   const [activeIteration, setActiveIteration] = useState<number | null>(null);
-  const [debugMode, setDebugMode] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [debugMode, setDebugMode] = useState<boolean>(false);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
 
   // 从 localStorage 加载 debug 模式设置
   useEffect(() => {
@@ -51,11 +61,11 @@ export default function ResultPage() {
     }
   }, []);
 
-  const logDebugInfo = (info: any) => {
+  const logDebugInfo = (info: DebugLogEntry) => {
     if (debugMode) {
       const timestamp = new Date().toISOString();
-      setDebugInfo(prev => ({
-        ...prev,
+      setDebugInfo((prev: DebugInfo | null) => ({
+        ...(prev || {}),
         [`${timestamp}`]: info
       }));
       console.log('[DEBUG]', timestamp, info);
@@ -354,7 +364,7 @@ export default function ResultPage() {
           <div className="text-gray-500">尚无迭代数据</div>
         ) : (
           <div className="space-y-6">
-            {searchData.iterations.map((iteration, index) => (
+            {searchData.iterations.map((iteration: Iteration, index: number) => (
               <div key={index} className="border rounded-lg overflow-hidden">
                 <div
                   className="p-4 bg-gray-50 border-b cursor-pointer flex justify-between items-center"

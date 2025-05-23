@@ -1,15 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 
+// 定义 Debug 信息类型
+interface DebugLogEntry {
+  action: string;
+  [key: string]: any;
+}
+
+interface DebugInfo {
+  [timestamp: string]: DebugLogEntry;
+}
+
 export default function Home() {
-  const [query, setQuery] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [debugMode, setDebugMode] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [query, setQuery] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [debugMode, setDebugMode] = useState<boolean>(false);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const router = useRouter();
 
   // 从 localStorage 加载 debug 模式设置
@@ -30,18 +40,18 @@ export default function Home() {
     }
   };
 
-  const logDebugInfo = (info: any) => {
+  const logDebugInfo = (info: DebugLogEntry) => {
     if (debugMode) {
       const timestamp = new Date().toISOString();
-      setDebugInfo(prev => ({
-        ...prev,
+      setDebugInfo((prev: DebugInfo | null) => ({
+        ...(prev || {}),
         [`${timestamp}`]: info
       }));
       console.log('[DEBUG]', timestamp, info);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (!query.trim()) return;
@@ -165,7 +175,7 @@ export default function Home() {
             <div className="flex-grow">
               <textarea
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setQuery(e.target.value)}
                 className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
                 placeholder="例如: 帮我找出2023年最受欢迎的三款轻量级浏览器，并比较它们的特点和性能"
                 rows={4}
@@ -183,13 +193,13 @@ export default function Home() {
                   }`}
               >
                 {isSubmitting ? (
-                  <>
+                  <React.Fragment>
                     <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     处理中...
-                  </>
+                  </React.Fragment>
                 ) : (
                   '开始搜索'
                 )}
