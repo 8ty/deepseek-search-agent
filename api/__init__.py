@@ -9,12 +9,10 @@ API 层 - 提供统一的 API 接口
 """
 
 from .search_api import SearchAPI
-from .github_runner import GitHubRunner
 from .webhook_handler import WebhookHandler
 
 __all__ = [
     "SearchAPI",
-    "GitHubRunner", 
     "WebhookHandler"
 ]
 

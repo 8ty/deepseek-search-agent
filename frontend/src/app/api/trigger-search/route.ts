@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       search_id: searchId,
       max_rounds: body.max_rounds || 5,
       include_scraping: body.include_scraping !== false,
-      callback_url: body.callback_url || `${process.env.NEXT_PUBLIC_BASE_URL}/api/webhook`
+      callback_url: body.callback_url || getCallbackUrl(request)
     };
 
     // 触发 GitHub Actions（如果配置了Token和Repository）
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              event_type: 'search_trigger',
+              event_type: 'search-request',
               client_payload: webhookData
             })
           }
@@ -202,4 +202,23 @@ export async function GET() {
     github_token_exists: !!process.env.GITHUB_TOKEN,
     github_repository: process.env.GITHUB_REPOSITORY || null
   });
+}
+
+// Helper function to get callback URL
+function getCallbackUrl(request: NextRequest): string {
+  // 尝试从环境变量获取
+  if (process.env.NEXT_PUBLIC_BASE_URL) {
+    return `${process.env.NEXT_PUBLIC_BASE_URL}/api/webhook`;
+  }
+  
+  // 从请求头获取host信息
+  const host = request.headers.get('host');
+  const protocol = request.headers.get('x-forwarded-proto') || 'https';
+  
+  if (host) {
+    return `${protocol}://${host}/api/webhook`;
+  }
+  
+  // 兜底默认值
+  return 'https://your-app.vercel.app/api/webhook';
 }

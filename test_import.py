@@ -15,17 +15,17 @@ def test_imports():
         import api
         print("✅ api 包导入成功")
         
-        # 测试 api.github_runner 导入
-        from api import github_runner
-        print("✅ api.github_runner 导入成功")
-        
-        # 测试 GitHubRunner 类导入
-        from api.github_runner import GitHubRunner
-        print("✅ GitHubRunner 类导入成功")
-        
         # 测试 config 包导入
         import config
         print("✅ config 包导入成功")
+        
+        # 测试直接导入 api.github_runner 模块（避免冲突）
+        import api.github_runner
+        print("✅ api.github_runner 模块导入成功")
+        
+        # 测试 GitHubRunner 类导入（直接从模块导入）
+        from api.github_runner import GitHubRunner
+        print("✅ GitHubRunner 类导入成功")
         
         # 测试创建 GitHubRunner 实例
         runner = GitHubRunner()
