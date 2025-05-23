@@ -16,15 +16,43 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install dependencies
+      - name: Debug - Check initial state
         run: |
-          python -m pip install --upgrade pip
-          pip install -e .
+          echo "=== Initial Debug ==="
+          pwd
+          ls -la
+          python --version
+          echo "=== End Initial Debug ==="
 
-      - name: Run debug script first
+      - name: Install basic dependencies
+        run: |
+          echo "=== Installing pip upgrade ==="
+          python -m pip install --upgrade pip
+          echo "=== Installing basic packages ==="
+          pip install aiohttp jinja2 python-dotenv
+          echo "=== Basic installation complete ==="
+
+      - name: Run simple test before package install
         env:
           QUERY: ${{ github.event.client_payload.query }}
           CALLBACK_URL: ${{ github.event.client_payload.callback_url }}
           JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: python debug_runner.py
+        run: python simple_test.py
+
+      - name: Install package in development mode
+        run: |
+          echo "=== Installing package with pip install -e . ==="
+          pip install -e . || echo "Package installation failed but continuing..."
+          echo "=== Package installation step complete ==="
+
+      - name: List files to debug
+        run: |
+          echo "=== Current directory ==="
+          pwd
+          echo "=== Files in current directory ==="
+          ls -la
+          echo "=== Python version ==="
+          python --version
+          echo "=== Environment variables ==="
+          env | grep -E "(QUERY|CALLBACK|API_KEY)" || true
