@@ -39,28 +39,94 @@ class SearchTool:
         if api_key := os.getenv("JINA_API_KEY"):
             headers["Authorization"] = f"Bearer {api_key}"
         
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers, timeout=self.timeout) as response:
-                    if response.status != 200:
-                        print(f"Failed to fetch {url}: {response.status}")
-                        raise Exception(f"Failed to fetch {url}: {response.status}")
-                    
-                    json_response = await response.json()
+        # 重试配置
+        max_retries = 3
+        retry_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, headers=headers, timeout=self.timeout) as response:
+                        if response.status == 200:
+                            json_response = await response.json()
+                            
+                            results = [
+                                {
+                                    "url": result["url"],
+                                    "title": result["title"], 
+                                    "description": result["description"],
+                                }
+                                for result in json_response["data"]
+                            ]
+                            
+                            return results
+                        
+                        elif response.status == 524:
+                            # 524 是 Cloudflare 超时错误
+                            error_msg = f"Jina API timeout (524) on attempt {attempt + 1}/{max_retries}"
+                            print(f"⚠️ {error_msg}")
+                            
+                            if attempt < max_retries - 1:
+                                print(f"🔄 Retrying in {retry_delay} seconds...")
+                                await asyncio.sleep(retry_delay)
+                                retry_delay *= 2  # 指数退避
+                                continue
+                            else:
+                                return [{"url": "", "title": "Search Error", "description": f"Search API returned 524 timeout error after {max_retries} attempts. This typically means the search service is overloaded. Try simpler search terms."}]
+                        
+                        elif response.status == 429:
+                            # 速率限制
+                            error_msg = f"Jina API rate limit (429) on attempt {attempt + 1}/{max_retries}"
+                            print(f"⚠️ {error_msg}")
+                            
+                            if attempt < max_retries - 1:
+                                wait_time = retry_delay * 2
+                                print(f"🔄 Rate limited, waiting {wait_time} seconds...")
+                                await asyncio.sleep(wait_time)
+                                continue
+                            else:
+                                return [{"url": "", "title": "Rate Limit Error", "description": f"Search API rate limit exceeded after {max_retries} attempts. Please wait and try again with different search terms."}]
+                        
+                        else:
+                            # 其他HTTP错误
+                            error_text = await response.text()
+                            error_msg = f"Jina API error {response.status}: {error_text}"
+                            print(f"❌ {error_msg}")
+                            
+                            if attempt < max_retries - 1:
+                                print(f"🔄 Retrying in {retry_delay} seconds...")
+                                await asyncio.sleep(retry_delay)
+                                retry_delay *= 2
+                                continue
+                            else:
+                                return [{"url": "", "title": f"API Error {response.status}", "description": f"Search API returned error {response.status}. Error details: {error_text[:200]}..."}]
+                
+            except asyncio.TimeoutError:
+                error_msg = f"Search request timeout on attempt {attempt + 1}/{max_retries}"
+                print(f"⚠️ {error_msg}")
+                
+                if attempt < max_retries - 1:
+                    print(f"🔄 Retrying in {retry_delay} seconds...")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                else:
+                    return [{"url": "", "title": "Timeout Error", "description": f"Search request timed out after {max_retries} attempts. Try simpler search terms or check your internet connection."}]
             
-            results = [
-                {
-                    "url": result["url"],
-                    "title": result["title"], 
-                    "description": result["description"],
-                }
-                for result in json_response["data"]
-            ]
-            
-            return results
-            
-        except Exception as e:
-            raise e
+            except Exception as e:
+                error_msg = f"Search error on attempt {attempt + 1}/{max_retries}: {str(e)}"
+                print(f"❌ {error_msg}")
+                
+                if attempt < max_retries - 1:
+                    print(f"🔄 Retrying in {retry_delay} seconds...")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                else:
+                    return [{"url": "", "title": "Search Error", "description": f"Search failed after {max_retries} attempts. Error: {str(e)}. Try different search terms or check your network connection."}]
+        
+        # 这行代码实际不会执行到，但为了完整性
+        return [{"url": "", "title": "Unknown Error", "description": "Search failed due to unknown error."}]
 
     def _format_results(self, results: List[Dict[str, Any]]) -> str:
         formatted_results = []
@@ -307,6 +373,7 @@ Your memory persists between investigation cycles and consists of:
   * Promising leads for future exploration
   * Key facts and findings
   * Contradictions or inconsistencies found
+  * Tool failures and alternative strategies to try
 - Keep each block focused on a single idea or piece of information
 - Always cite sources when recording information from tool results
 - Use IDs to track and manage your knowledge (e.g., deleting outdated information)
@@ -330,6 +397,26 @@ Your memory persists between investigation cycles and consists of:
 - **Maximum 3 tool calls per round**
 - **Never repeat the exact same tool call**
 - **Always record valuable information from tool results in memory blocks**
+
+## Error Recovery Strategies
+When tools fail or return errors:
+1. **Try alternative search terms**: Break down complex queries into simpler ones
+2. **Use broader search terms**: If specific searches fail, try more general topics
+3. **Analyze error patterns**: Record what failed and why in memory blocks
+4. **Attempt different approaches**: If direct searches fail, try related topics
+5. **Continue investigating**: Tool failures don't mean the task is impossible
+6. **Only give up after exhausting reasonable alternatives**
+
+## Task Completion Guidelines
+- **IMPORTANT**: Do NOT set status to "DONE" just because tools are failing
+- **Persistence is key**: Try multiple search strategies before concluding
+- **Record failures**: Document what you tried and what failed in memory blocks
+- **Set status to "DONE" ONLY when**:
+  - You have found sufficient information to answer the task comprehensively, OR
+  - You have exhausted all reasonable search strategies and approaches, OR
+  - The task appears to be asking for something that doesn't exist or is meaningless
+- **If tools consistently fail**: Try simpler, more basic searches related to the topic
+- **For unclear tasks**: Try to interpret them in different ways and search accordingly
 
 ## Response Format
 You must respond with a valid JSON object containing:
@@ -358,7 +445,7 @@ You must respond with a valid JSON object containing:
   For example, if you find a potential webpage to scrap, you must store the URL and your intention
   Example: `{"operation": "add", "content": "Found relevant URL: https://... to scrape ..."}`
 - IMPORTANT: Make sure to delete memory blocks that are no longer necessary
-- Set status to "DONE" only when you have fully addressed the task
+- **PERSISTENCE**: Don't give up too early! Try multiple approaches and search strategies
 - Only include the "answer" field when status is "DONE"
 
 Task:
@@ -380,6 +467,7 @@ Think carefully about:
 - what information do you need to preserve
 - which tools to call next
 - how to build your answer systematically with focused memory blocks
+- whether you've tried enough different approaches before giving up
 
 Do NOT rely on your internal knowledge (may be biased), aim to discover information using the tools!"""
 
@@ -422,6 +510,9 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
         # 发送初始状态
         await self.send_update("start", {"task": self.task})
         
+        consecutive_failures = 0
+        total_tool_calls = 0
+        
         while self.round < max_rounds:
             try:
                 print(f"\n🔄 === Round {self.round + 1} ===")
@@ -442,6 +533,33 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 if not response_json:
                     print("❌ Failed to extract JSON from response")
                     break
+                
+                # 检查是否过早结束（在前3轮内设置DONE但没有有效答案）
+                status_update = response_json.get("status_update", "IN_PROGRESS")
+                answer = response_json.get("answer", "")
+                
+                if (status_update == "DONE" and self.round < 3 and 
+                    (not answer or len(answer.strip()) < 50 or "failed" in answer.lower() or "error" in answer.lower())):
+                    
+                    print(f"⚠️ Detecting premature completion in round {self.round + 1}")
+                    print(f"🔄 Forcing continuation to explore more options...")
+                    
+                    # 强制设置为IN_PROGRESS并添加指导记忆块
+                    response_json["status_update"] = "IN_PROGRESS"
+                    if "memory_updates" not in response_json:
+                        response_json["memory_updates"] = []
+                    
+                    response_json["memory_updates"].append({
+                        "operation": "add",
+                        "content": f"Previous attempt to end search was too early (round {self.round + 1}). Need to try more search strategies and approaches before concluding."
+                    })
+                    
+                    # 如果没有工具调用，添加一些建议的调用
+                    if not response_json.get("tool_calls"):
+                        response_json["tool_calls"] = [
+                            {"tool": "search", "input": f"{self.task} explanation"},
+                            {"tool": "search", "input": f"{self.task} meaning definition"}
+                        ]
                 
                 # 更新工作区
                 self.workspace.update_blocks(
@@ -464,7 +582,7 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 # 发送迭代更新
                 await self.send_update("iteration", iteration_result)
 
-                # 检查是否已完成
+                # 检查是否已完成（使用更新后的状态）
                 if self.workspace.is_done():
                     final_answer = response_json.get("answer", "")
                     await self.send_update("complete", {
@@ -478,7 +596,18 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 tool_calls = response_json.get("tool_calls", [])
                 if not tool_calls:
                     print("⚠️ No tool calls in response")
-                    break
+                    consecutive_failures += 1
+                    
+                    # 如果连续多轮没有工具调用，且轮数还不多，强制继续
+                    if consecutive_failures >= 2 and self.round < max_rounds - 1:
+                        print("🔄 Adding fallback search to continue exploration...")
+                        tool_calls = [{"tool": "search", "input": f"information about {self.task}"}]
+                    else:
+                        break
+                else:
+                    consecutive_failures = 0
+                
+                total_tool_calls += len(tool_calls)
                 
                 tasks = [
                     self.run_tool(call["tool"], call["input"], self.task)
@@ -486,6 +615,14 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 ]
                 
                 tool_outputs = await asyncio.gather(*tasks)
+                
+                # 检查工具输出质量
+                successful_outputs = 0
+                for output in tool_outputs:
+                    if output and not output.startswith("Tool execution failed") and not "failed" in output.lower():
+                        successful_outputs += 1
+                
+                print(f"📊 Tool success rate this round: {successful_outputs}/{len(tool_calls)}")
                 
                 # 记录工具输出
                 tool_records = [
@@ -510,10 +647,19 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
         
         # 如果达到最大轮数但任务未完成
         if not self.workspace.is_done() and self.round >= max_rounds:
+            # 生成总结性答案
+            summary_answer = f"搜索完成 {self.round} 轮迭代，共执行 {total_tool_calls} 次工具调用。"
+            
+            if total_tool_calls == 0:
+                summary_answer += "由于工具调用失败，无法获取外部信息来回答查询。"
+            else:
+                summary_answer += "基于可用信息，已尝试多种搜索策略。"
+            
             await self.send_update("timeout", {
                 "message": f"Reached maximum {max_rounds} rounds without completion",
                 "iterations": self.iteration_results,
-                "final_state": self.workspace.to_string()
+                "final_state": self.workspace.to_string(),
+                "summary": summary_answer
             })
         
         return {
@@ -521,7 +667,8 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
             "final_state": self.workspace.to_string(),
             "is_complete": self.workspace.is_done(),
             "answer": self.workspace.state.get("answer"),
-            "total_rounds": self.round
+            "total_rounds": self.round,
+            "total_tool_calls": total_tool_calls
         }
 
 
