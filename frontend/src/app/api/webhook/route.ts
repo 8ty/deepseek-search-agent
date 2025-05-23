@@ -29,8 +29,8 @@ export async function POST(request: Request) {
     // 获取现有的搜索数据
     let existingData: any = null;
 
-    // 使用内存存储
-    existingData = memoryStorage[`search:${searchId}`];
+    // 使用共享存储
+    existingData = memoryStorage.get(`search:${searchId}`);
 
     // 初始化或更新搜索数据
     const searchData = existingData || {
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     }
 
     // 保存更新的数据
-    memoryStorage[`search:${searchId}`] = searchData;
+    memoryStorage.set(`search:${searchId}`, searchData);
 
     return NextResponse.json({
       success: true,
