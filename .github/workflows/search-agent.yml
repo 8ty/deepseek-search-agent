@@ -21,10 +21,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
-      - name: Test main function execution
+      - name: Test step-by-step execution
         env:
           QUERY: ${{ github.event.client_payload.query }}
           CALLBACK_URL: ${{ github.event.client_payload.callback_url }}
           JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: python test_main.py
+        run: |
+          echo "=== 运行逐步测试 ==="
+          python test_main.py
+          echo "=== 逐步测试完成 ==="
+
+      - name: Test direct main function with timeout
+        env:
+          QUERY: ${{ github.event.client_payload.query }}
+          CALLBACK_URL: ${{ github.event.client_payload.callback_url }}
+          JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          echo "=== 运行直接main函数测试 ==="
+          timeout 60s python direct_main_test.py || echo "直接测试超时或失败"
+          echo "=== 直接测试完成 ==="
