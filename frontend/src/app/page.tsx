@@ -16,12 +16,17 @@ export default function Home() {
   const [githubToken, setGithubToken] = useState('');
   const [githubRepository, setGithubRepository] = useState('');
   const [debugMode, setDebugMode] = useState(false);
+  const [silentMode, setSilentMode] = useState(true); // 默认启用静默模式
 
   // 从 localStorage 加载设置
   useEffect(() => {
     const savedDebugMode = localStorage.getItem('deepseek-debug-mode');
+    const savedSilentMode = localStorage.getItem('deepseek-silent-mode');
     if (savedDebugMode === 'true') {
       setDebugMode(true);
+    }
+    if (savedSilentMode !== null) {
+      setSilentMode(savedSilentMode === 'true');
     }
   }, []);
 
@@ -29,6 +34,22 @@ export default function Home() {
   const handleDebugModeChange = (enabled: boolean) => {
     setDebugMode(enabled);
     localStorage.setItem('deepseek-debug-mode', enabled.toString());
+    // 启用调试模式时自动关闭静默模式
+    if (enabled) {
+      setSilentMode(false);
+      localStorage.setItem('deepseek-silent-mode', 'false');
+    }
+  };
+
+  // 保存静默模式设置到 localStorage
+  const handleSilentModeChange = (enabled: boolean) => {
+    setSilentMode(enabled);
+    localStorage.setItem('deepseek-silent-mode', enabled.toString());
+    // 启用静默模式时自动关闭调试模式
+    if (enabled) {
+      setDebugMode(false);
+      localStorage.setItem('deepseek-debug-mode', 'false');
+    }
   };
 
   // 检查配置状态
@@ -48,7 +69,8 @@ export default function Home() {
         query: query.trim(),
         max_rounds: 5,
         include_scraping: true,
-        debug_mode: debugMode // 传递debug模式状态
+        debug_mode: debugMode, // 传递debug模式状态
+        silent_mode: silentMode // 传递静默模式状态
       };
 
       // 如果环境变量未配置且用户提供了手动配置
@@ -265,72 +287,145 @@ export default function Home() {
             </div>
           )}
 
-          {/* Debug 模式开关 */}
-          <div className="mb-4 flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
+          {/* 运行模式选项 */}
+          <div className="mb-4 space-y-3"
                style={{
-                 marginBottom: '16px',
-                 display: 'flex',
-                 alignItems: 'center',
-                 justifyContent: 'space-between',
-                 padding: '12px',
-                 backgroundColor: '#f9fafb',
-                 borderRadius: '8px',
-                 border: '1px solid #e5e7eb'
+                 marginBottom: '16px'
                }}>
-            <div>
-              <label className="text-sm font-medium text-gray-700"
-                     style={{
-                       fontSize: '0.875rem',
-                       fontWeight: '500',
-                       color: '#374151'
-                     }}>
-                🐛 调试模式
-              </label>
-              <p className="text-xs text-gray-500 mt-1"
+            
+            {/* Debug 模式开关 */}
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
                  style={{
-                   fontSize: '0.75rem',
-                   color: '#6b7280',
-                   marginTop: '4px'
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'space-between',
+                   padding: '12px',
+                   backgroundColor: debugMode ? '#eff6ff' : '#f9fafb',
+                   borderRadius: '8px',
+                   border: debugMode ? '1px solid #3b82f6' : '1px solid #e5e7eb'
                  }}>
-                {debugMode ? '已启用详细日志输出' : '启用后显示搜索过程的详细信息'}
-              </p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                className="sr-only"
-                checked={debugMode}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleDebugModeChange(e.target.checked)}
-              />
-              <div
-                className={`w-11 h-6 rounded-full shadow-inner transition-colors ${
-                  debugMode ? 'bg-blue-500' : 'bg-gray-300'
-                }`}
-                style={{
-                  width: '44px',
-                  height: '24px',
-                  borderRadius: '12px',
-                  backgroundColor: debugMode ? '#3b82f6' : '#d1d5db',
-                  transition: 'background-color 0.2s'
-                }}
-              >
+              <div>
+                <label className="text-sm font-medium text-gray-700"
+                       style={{
+                         fontSize: '0.875rem',
+                         fontWeight: '500',
+                         color: '#374151'
+                       }}>
+                  🐛 调试模式
+                </label>
+                <p className="text-xs text-gray-500 mt-1"
+                   style={{
+                     fontSize: '0.75rem',
+                     color: '#6b7280',
+                     marginTop: '4px'
+                   }}>
+                  {debugMode ? '已启用详细日志输出（自动关闭静默模式）' : '启用后显示搜索过程的详细信息'}
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={debugMode}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleDebugModeChange(e.target.checked)}
+                />
                 <div
-                  className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
-                    debugMode ? 'translate-x-6' : 'translate-x-1'
+                  className={`w-11 h-6 rounded-full shadow-inner transition-colors ${
+                    debugMode ? 'bg-blue-500' : 'bg-gray-300'
                   }`}
                   style={{
-                    width: '16px',
-                    height: '16px',
-                    backgroundColor: 'white',
-                    borderRadius: '8px',
-                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                    transform: debugMode ? 'translateX(20px)' : 'translateX(4px)',
-                    transition: 'transform 0.2s',
-                    marginTop: '4px'
+                    width: '44px',
+                    height: '24px',
+                    borderRadius: '12px',
+                    backgroundColor: debugMode ? '#3b82f6' : '#d1d5db',
+                    transition: 'background-color 0.2s'
                   }}
-                />
+                >
+                  <div
+                    className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+                      debugMode ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                    style={{
+                      width: '16px',
+                      height: '16px',
+                      backgroundColor: 'white',
+                      borderRadius: '8px',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                      transform: debugMode ? 'translateX(20px)' : 'translateX(4px)',
+                      transition: 'transform 0.2s',
+                      marginTop: '4px'
+                    }}
+                  />
+                </div>
+              </label>
+            </div>
+
+            {/* 静默模式开关 */}
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
+                 style={{
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'space-between',
+                   padding: '12px',
+                   backgroundColor: silentMode ? '#f0fdf4' : '#f9fafb',
+                   borderRadius: '8px',
+                   border: silentMode ? '1px solid #16a34a' : '1px solid #e5e7eb'
+                 }}>
+              <div>
+                <label className="text-sm font-medium text-gray-700"
+                       style={{
+                         fontSize: '0.875rem',
+                         fontWeight: '500',
+                         color: '#374151'
+                       }}>
+                  🔇 静默模式
+                </label>
+                <p className="text-xs text-gray-500 mt-1"
+                   style={{
+                     fontSize: '0.75rem',
+                     color: '#6b7280',
+                     marginTop: '4px'
+                   }}>
+                  {silentMode ? '已启用静默运行（隐藏详细输出）' : '关闭后在GitHub Actions中显示详细日志'}
+                </p>
               </div>
-            </label>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={silentMode}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSilentModeChange(e.target.checked)}
+                />
+                <div
+                  className={`w-11 h-6 rounded-full shadow-inner transition-colors ${
+                    silentMode ? 'bg-green-500' : 'bg-gray-300'
+                  }`}
+                  style={{
+                    width: '44px',
+                    height: '24px',
+                    borderRadius: '12px',
+                    backgroundColor: silentMode ? '#16a34a' : '#d1d5db',
+                    transition: 'background-color 0.2s'
+                  }}
+                >
+                  <div
+                    className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+                      silentMode ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                    style={{
+                      width: '16px',
+                      height: '16px',
+                      backgroundColor: 'white',
+                      borderRadius: '8px',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                      transform: silentMode ? 'translateX(20px)' : 'translateX(4px)',
+                      transition: 'transform 0.2s',
+                      marginTop: '4px'
+                    }}
+                  />
+                </div>
+              </label>
+            </div>
           </div>
 
           {/* 搜索按钮 */}

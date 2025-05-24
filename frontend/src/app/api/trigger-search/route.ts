@@ -72,7 +72,8 @@ export async function POST(request: NextRequest) {
       max_rounds: body.max_rounds || 5,
       include_scraping: body.include_scraping !== false,
       callback_url: body.callback_url || getCallbackUrl(request),
-      debug_mode: body.debug_mode || false
+      debug_mode: body.debug_mode || false,
+      silent_mode: body.silent_mode !== false // 默认启用静默模式
     };
 
     // 触发 GitHub Actions（如果配置了Token和Repository）
@@ -199,7 +200,7 @@ export async function GET() {
   return NextResponse.json({
     message: "使用 POST 方法触发搜索",
     required_fields: ["query"],
-    optional_fields: ["workspace_id", "max_rounds", "include_scraping", "callback_url"],
+    optional_fields: ["workspace_id", "max_rounds", "include_scraping", "callback_url", "debug_mode", "silent_mode"],
     environment_configured: envConfigured,
     github_token_exists: !!process.env.GITHUB_TOKEN,
     github_repository: process.env.GITHUB_REPOSITORY || null
