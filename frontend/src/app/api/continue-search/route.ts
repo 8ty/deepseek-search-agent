@@ -43,21 +43,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 准备继续搜索的数据
+    // 准备继续搜索的数据，映射到GitHub Actions期望的字段名
     const continueSearchData = {
-      query: existingSearch.query,
-      workspace_id: workspace_id,
-      search_id: search_id,
-      max_rounds: max_rounds,
+      test_scope: existingSearch.query,          // GitHub Actions 期望 test_scope
+      test_config: getCallbackUrl(request),      // GitHub Actions 期望 test_config 
+      environment: search_id,                    // GitHub Actions 期望 environment
+      search_id: search_id,                      // 保留兼容
+      test_rounds: max_rounds,                   // GitHub Actions 期望 test_rounds
       include_scraping: true,
-      callback_url: getCallbackUrl(request),
       debug_mode: false,
-      silent_mode: true,
+      quiet_mode: true,                          // GitHub Actions 期望 quiet_mode
       continue_from_state: current_state,
       is_continuation: true
     };
 
-    // 触发GitHub Actions继续搜索
+    // 触发GitHub Actions继续搜索（使用统一的 search_trigger 事件类型）
     try {
       const githubResponse = await fetch(
         `https://api.github.com/repos/${envGithubRepository}/dispatches`,
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            event_type: 'continue_search',
+            event_type: 'search_trigger',  // 使用统一的事件类型
             client_payload: continueSearchData
           })
         }

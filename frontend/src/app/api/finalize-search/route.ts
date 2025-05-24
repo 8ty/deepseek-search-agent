@@ -43,20 +43,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 准备生成最终结果的数据
+    // 准备生成最终结果的数据，映射到GitHub Actions期望的字段名
     const finalizeData = {
-      query: query,
-      workspace_id: workspace_id,
-      search_id: search_id,
+      test_scope: query,                         // GitHub Actions 期望 test_scope
+      test_config: getCallbackUrl(request),      // GitHub Actions 期望 test_config
+      environment: search_id,                    // GitHub Actions 期望 environment
+      search_id: search_id,                      // 保留兼容
+      test_rounds: 1,                            // GitHub Actions 期望 test_rounds，生成结果只需要1轮
       iterations: iterations,
       final_state: final_state,
-      callback_url: getCallbackUrl(request),
       debug_mode: false,
-      silent_mode: true,
+      quiet_mode: true,                          // GitHub Actions 期望 quiet_mode
       action_type: 'finalize'
     };
 
-    // 触发GitHub Actions生成最终结果
+    // 触发GitHub Actions生成最终结果（使用统一的 search_trigger 事件类型）
     try {
       const githubResponse = await fetch(
         `https://api.github.com/repos/${envGithubRepository}/dispatches`,
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            event_type: 'finalize_search',
+            event_type: 'search_trigger',  // 使用统一的事件类型
             client_payload: finalizeData
           })
         }

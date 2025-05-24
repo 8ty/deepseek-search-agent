@@ -83,16 +83,16 @@ export async function POST(request: NextRequest) {
       console.warn('Vercel Blob存储失败，使用内存存储:', blobError);
     }
 
-    // 准备 Webhook 数据
+    // 准备 Webhook 数据，映射到GitHub Actions期望的字段名
     const webhookData = {
-      query: body.query,
-      workspace_id: workspaceId,
-      search_id: searchId,
-      max_rounds: body.max_rounds || 5,
+      test_scope: body.query,                    // GitHub Actions 期望 test_scope，实际是搜索查询
+      test_config: body.callback_url || getCallbackUrl(request), // GitHub Actions 期望 test_config，实际是回调URL
+      environment: searchId,                     // GitHub Actions 期望 environment，用于WORKSPACE_ID
+      search_id: searchId,                       // 保留原有字段以便兼容
+      test_rounds: body.max_rounds || 5,         // GitHub Actions 期望 test_rounds，实际是最大轮数
       include_scraping: body.include_scraping !== false,
-      callback_url: body.callback_url || getCallbackUrl(request),
       debug_mode: body.debug_mode || false,
-      silent_mode: body.silent_mode !== false // 默认启用静默模式
+      quiet_mode: body.silent_mode !== false    // GitHub Actions 期望 quiet_mode，实际是静默模式
     };
 
     // 触发 GitHub Actions（如果配置了Token和Repository）
