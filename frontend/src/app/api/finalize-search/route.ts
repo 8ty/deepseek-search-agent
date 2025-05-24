@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import memoryStorage from '../../../lib/storage';
-import { head, put } from '@vercel/blob';
+import { list, put } from '@vercel/blob';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,15 +18,25 @@ export async function POST(request: NextRequest) {
     // 从Vercel Blob读取之前的搜索状态
     let previousSearchState = null;
     try {
-      const blobHead = await head(`searches/${search_id}.json`);
-      if (blobHead) {
+      // 使用list方法来检查文件是否存在，然后读取内容
+      const listResult = await list({
+        prefix: `searches/${search_id}.json`,
+        limit: 1
+      });
+      
+      if (listResult.blobs.length > 0) {
+        const blob = listResult.blobs[0];
         // 通过URL获取blob内容
-        const blobResponse = await fetch(blobHead.url);
+        const blobResponse = await fetch(blob.url);
         if (blobResponse.ok) {
           const blobText = await blobResponse.text();
           previousSearchState = JSON.parse(blobText);
           console.log(`从Blob读取到搜索状态用于总结: ${search_id}`);
+        } else {
+          console.warn('Blob响应不成功:', blobResponse.status, blobResponse.statusText);
         }
+      } else {
+        console.warn(`Blob中未找到搜索状态: searches/${search_id}.json`);
       }
     } catch (blobError) {
       console.warn('从Blob读取搜索状态失败，尝试从内存读取:', blobError);
