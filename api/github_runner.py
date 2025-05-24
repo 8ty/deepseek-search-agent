@@ -825,13 +825,13 @@ async def main():
     print("🚀 启动 DeepSeek 搜索代理")
     
     # 从 GitHub Actions 环境变量获取参数
-    query = os.getenv("QUERY")
+    query = os.getenv("SEARCH_QUERY")  # 修复：使用正确的环境变量名
     callback_url = os.getenv("CALLBACK_URL")
     max_rounds = int(os.getenv("MAX_ROUNDS", "5"))
     include_scraping = os.getenv("INCLUDE_SCRAPING", "true").lower() == "true"
     workspace_id = os.getenv("WORKSPACE_ID", f"ws-{int(datetime.now().timestamp() * 1000)}")
     environment = os.getenv("ENVIRONMENT", "production")
-    
+
     print(f"📋 搜索查询: {query}")
     print(f"📞 回调 URL: {callback_url}")
     print(f"🏠 工作空间: {workspace_id}")
