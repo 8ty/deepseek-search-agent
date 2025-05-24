@@ -321,10 +321,11 @@ class Prompt:
 class GitHubSearchAgent:
     """GitHub Actions 搜索代理"""
     
-    def __init__(self, task: str, callback_url: str = None, current_date: str = None):
+    def __init__(self, task: str, callback_url: str = None, current_date: str = None, search_id: str = None):
         self.task = task
         self.current_date = current_date or datetime.now().strftime("%Y-%m-%d")
         self.callback_url = callback_url
+        self.search_id = search_id or f"search-{int(datetime.now().timestamp() * 1000)}"
         self.tool_records = None
         self.workspace = Workspace()
         self.round = 0
@@ -477,6 +478,10 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
             print(f"📤 Update [{update_type}]: {json.dumps(data, ensure_ascii=False, indent=2)}")
             return
             
+        # 构建带有search_id的回调URL
+        separator = '&' if '?' in self.callback_url else '?'
+        callback_url_with_id = f"{self.callback_url}{separator}id={self.search_id}"
+        
         payload = {
             "type": update_type,
             "data": data,
@@ -485,9 +490,10 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
         
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(self.callback_url, json=payload) as response:
+                async with session.post(callback_url_with_id, json=payload) as response:
                     if response.status != 200:
-                        print(f"❌ Failed to send update: {await response.text()}")
+                        error_text = await response.text()
+                        print(f"❌ Failed to send update: {error_text}")
                     else:
                         print(f"✅ Update sent: {update_type}")
         except Exception as e:
@@ -694,6 +700,7 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
         
         print("📋 准备返回最终结果...")
         final_result = {
+            "search_id": self.search_id,
             "iterations": self.iteration_results,
             "final_state": self.workspace.to_string(),
             "is_complete": self.workspace.is_done(),
@@ -712,7 +719,7 @@ class GitHubRunner:
     def __init__(self):
         self.settings = get_settings()
 
-    async def run_iterative_search(self, query: str, callback_url: str = None, max_rounds: int = 5) -> Dict[str, Any]:
+    async def run_iterative_search(self, query: str, callback_url: str = None, max_rounds: int = 5, search_id: str = None) -> Dict[str, Any]:
         """运行迭代搜索"""
         try:
             print(f"🔄 开始迭代搜索: {query}")
@@ -723,9 +730,11 @@ class GitHubRunner:
             # 创建搜索代理
             agent = GitHubSearchAgent(
                 task=query,
-                callback_url=callback_url
+                callback_url=callback_url,
+                search_id=search_id
             )
             print("✅ 搜索代理创建成功")
+            print(f"🆔 搜索ID: {agent.search_id}")
             
             print("🎯 开始运行搜索代理...")
             print("⚠️  这里可能会卡住 - 监控中...")
@@ -764,7 +773,8 @@ class GitHubRunner:
             print(f"🔍 从环境变量开始搜索: {query}")
             
             # 执行迭代搜索
-            result = await self.run_iterative_search(query, callback_url, max_rounds)
+            search_id = os.getenv("WORKSPACE_ID", f"search-{int(datetime.now().timestamp() * 1000)}")
+            result = await self.run_iterative_search(query, callback_url, max_rounds, search_id)
             
             return result
             
@@ -856,7 +866,7 @@ async def main():
     
     try:
         # 执行搜索
-        result = await runner.run_iterative_search(query, callback_url, max_rounds)
+        result = await runner.run_iterative_search(query, callback_url, max_rounds, workspace_id)
         
         # 输出结果
         print("\n" + "=" * 50)
