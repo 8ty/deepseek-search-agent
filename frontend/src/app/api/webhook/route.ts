@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import memoryStorage from '../../../lib/storage';
-import { put } from '@vercel/edge-config';
+import { put } from '@vercel/blob';
 
 // 注意：在生产环境中应该使用真实的数据库或KV存储
 // 目前使用共享内存存储进行演示
@@ -89,12 +89,15 @@ export async function POST(request: Request) {
       updatedAt: new Date().toISOString()
     };
 
-    // 存储到Edge Config（如果可用）
+    // 存储到Vercel Blob（如果可用）
     try {
-      await put(`search_${searchId}`, searchData);
-      console.log(`搜索结果已存储到Edge Config: search_${searchId}`);
-    } catch (edgeConfigError) {
-      console.warn('Edge Config存储失败，使用内存存储:', edgeConfigError);
+      await put(`searches/${searchId}.json`, JSON.stringify(searchData), {
+        access: 'public',
+        addRandomSuffix: false
+      });
+      console.log(`搜索结果已存储到Vercel Blob: searches/${searchId}.json`);
+    } catch (blobError) {
+      console.warn('Vercel Blob存储失败，使用内存存储:', blobError);
       // 回退到内存存储
       memoryStorage.set(`search:${searchId}`, searchData);
     }

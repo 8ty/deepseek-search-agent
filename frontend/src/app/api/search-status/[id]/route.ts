@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { get } from '@vercel/edge-config';
+import { list } from '@vercel/blob';
 import memoryStorage from '../../../../lib/storage';
 
 // 注意：在生产环境中应该使用真实的数据库或KV存储
@@ -16,15 +16,29 @@ export async function GET(
       return NextResponse.json({ error: '缺少搜索ID' }, { status: 400 });
     }
 
-    // 首先尝试从Edge Config获取
+    // 首先尝试从Vercel Blob获取
     let searchData;
     try {
-      searchData = await get(`search_${id}`);
+      const blobList = await list({
+        prefix: 'searches/',
+        limit: 1000
+      });
+
+      const targetBlob = blobList.blobs.find(blob => 
+        blob.pathname === `searches/${id}.json`
+      );
+
+      if (targetBlob) {
+        const response = await fetch(targetBlob.url);
+        if (response.ok) {
+          searchData = await response.json();
+        }
+      }
     } catch (error) {
-      console.warn('Edge Config not available, falling back to memory storage');
+      console.warn('Vercel Blob不可用，回退到内存存储:', error);
     }
 
-    // 如果Edge Config没有数据，回退到内存存储
+    // 如果Blob没有数据，回退到内存存储
     if (!searchData) {
       searchData = memoryStorage.get(`search:${id}`);
     }
