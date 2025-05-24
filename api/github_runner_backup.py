@@ -866,16 +866,7 @@ class GitHubRunner:
             # 从环境变量获取参数
             query = os.getenv("SEARCH_QUERY")
             if not query:
-                return {
-                    "error": "环境变量 SEARCH_QUERY 未设置",
-                    "success": False
-                }
-            
-            callback_url = os.getenv("CALLBACK_URL")
-            max_rounds = int(os.getenv("MAX_ROUNDS") or "5")
-            debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
-            
-            if debug_mode:
+                                return {                    "error": "环境变量 SEARCH_QUERY 未设置",                    "success": False                }                        callback_url = os.getenv("CALLBACK_URL")            max_rounds = safe_int_env("MAX_ROUNDS", "5")            debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"                        if debug_mode:
                 print(f"🔍 从环境变量开始搜索: {query}")
             
             # 执行迭代搜索
@@ -932,6 +923,17 @@ class GitHubRunner:
         return len(errors) == 0, errors
 
 
+def safe_int_env(env_var: str, default: str) -> int:
+    """安全地从环境变量获取整数值"""
+    value = os.getenv(env_var, default)
+    if not value or value.strip() == "":
+        return int(default)
+    try:
+        return int(value)
+    except ValueError:
+        return int(default)
+
+
 # CLI 入口函数
 async def main():
     """主函数 - CLI 入口"""
@@ -943,7 +945,7 @@ async def main():
     # 从 GitHub Actions 环境变量获取参数
     query = os.getenv("SEARCH_QUERY")
     callback_url = os.getenv("CALLBACK_URL")
-    max_rounds = int(os.getenv("MAX_ROUNDS") or "5")
+    max_rounds = safe_int_env("MAX_ROUNDS", "5")
     include_scraping = os.getenv("INCLUDE_SCRAPING", "true").lower() == "true"
     workspace_id = os.getenv("WORKSPACE_ID", f"ws-{int(datetime.now().timestamp() * 1000)}")
     environment = os.getenv("ENVIRONMENT", "production")

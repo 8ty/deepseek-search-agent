@@ -296,7 +296,7 @@ class EnhancedRunner(GitHubRunner):
             if mode == "continue":
                 # 继续搜索模式
                 continue_from_state = os.getenv("CONTINUE_FROM_STATE", "")
-                max_rounds = int(os.getenv("MAX_ROUNDS", "3"))
+                max_rounds = int(os.getenv("MAX_ROUNDS") or "3")
                 
                 if debug_mode:
                     print(f"🔄 从环境变量继续搜索: {query}")
