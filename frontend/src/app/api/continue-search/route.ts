@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     // 准备精简的搜索状态数据（只包含必要信息）
     const compactSearchState = {
       original_query: previousSearchState.query,
-      previous_iterations: previousSearchState.iterations?.map(iter => ({
+      previous_iterations: previousSearchState.iterations?.map((iter: any) => ({
         round: iter.round,
         timestamp: iter.timestamp,
         workspace_state: iter.workspace_state,

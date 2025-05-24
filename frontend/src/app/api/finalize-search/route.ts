@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import memoryStorage from '../../../lib/storage';
-import { get, put } from '@vercel/blob';
+import { head, put } from '@vercel/blob';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,11 +18,15 @@ export async function POST(request: NextRequest) {
     // 从Vercel Blob读取之前的搜索状态
     let previousSearchState = null;
     try {
-      const blobResponse = await get(`searches/${search_id}.json`);
-      if (blobResponse) {
-        const blobText = await blobResponse.text();
-        previousSearchState = JSON.parse(blobText);
-        console.log(`从Blob读取到搜索状态用于总结: ${search_id}`);
+      const blobHead = await head(`searches/${search_id}.json`);
+      if (blobHead) {
+        // 通过URL获取blob内容
+        const blobResponse = await fetch(blobHead.url);
+        if (blobResponse.ok) {
+          const blobText = await blobResponse.text();
+          previousSearchState = JSON.parse(blobText);
+          console.log(`从Blob读取到搜索状态用于总结: ${search_id}`);
+        }
       }
     } catch (blobError) {
       console.warn('从Blob读取搜索状态失败，尝试从内存读取:', blobError);
@@ -47,10 +51,10 @@ export async function POST(request: NextRequest) {
     const summaryData = {
       original_query: previousSearchState.query,
       total_iterations: previousSearchState.iterations?.length || 0,
-      key_findings: previousSearchState.iterations?.map((iter, index) => ({
+      key_findings: previousSearchState.iterations?.map((iter: any, index: number) => ({
         round: iter.round,
         timestamp: iter.timestamp,
-        findings: iter.tool_calls?.map(call => `${call.tool}: ${call.input.substring(0, 100)}...`) || [],
+        findings: iter.tool_calls?.map((call: any) => `${call.tool}: ${call.input.substring(0, 100)}...`) || [],
         workspace_summary: iter.workspace_state?.substring(0, 200) + '...' || ''
       })) || [],
       partial_result: previousSearchState.result || previousSearchState.answer || '搜索过程中收集的信息需要进一步整理',
