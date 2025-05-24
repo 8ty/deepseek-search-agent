@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import memoryStorage from '../../../lib/storage';
+import { put } from '@vercel/edge-config';
 
 // 注意：在生产环境中应该使用真实的数据库或KV存储
 // 目前使用共享内存存储进行演示
@@ -63,6 +64,14 @@ export async function POST(request: NextRequest) {
     console.log('=== END TRIGGER SEARCH DEBUG ===');
     
     memoryStorage.set(`search:${searchId}`, searchData);
+
+    // 将搜索状态存储到Edge Config
+    await put(`search_${searchId}`, {
+      status: 'pending',
+      query: body.query,
+      createdAt: new Date().toISOString(),
+      results: null
+    });
 
     // 准备 Webhook 数据
     const webhookData = {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { get } from '@vercel/edge-config';
 import memoryStorage from '../../../../lib/storage';
 
 // 注意：在生产环境中应该使用真实的数据库或KV存储
@@ -9,53 +10,34 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const searchId = params.id;
-    const { searchParams } = new URL(request.url);
-    const workspaceId = searchParams.get('workspace_id');
+    const { id } = params;
 
-    if (!workspaceId) {
-      return NextResponse.json(
-        { 
-          error: "缺少 workspace_id 参数",
-          code: "MISSING_WORKSPACE_ID" 
-        },
-        { status: 400 }
-      );
+    if (!id) {
+      return NextResponse.json({ error: '缺少搜索ID' }, { status: 400 });
     }
 
-    // 获取搜索数据
-    let searchData = null;
+    // 首先尝试从Edge Config获取
+    let searchData;
+    try {
+      searchData = await get(`search_${id}`);
+    } catch (error) {
+      console.warn('Edge Config not available, falling back to memory storage');
+    }
 
-    console.log('=== SEARCH STATUS DEBUG ===');
-    console.log('Search ID:', searchId);
-    console.log('Workspace ID:', workspaceId);
-    console.log('Memory Store Key:', `search:${searchId}`);
-    console.log('Current memory store keys:', memoryStorage.keys());
-    console.log('All memory store data:', 'Available keys: ' + memoryStorage.keys().join(', '));
-
-    // 使用共享存储
-    searchData = memoryStorage.get(`search:${searchId}`);
-    
-    console.log('Retrieved data:', searchData);
-    console.log('=== END SEARCH STATUS DEBUG ===');
+    // 如果Edge Config没有数据，回退到内存存储
+    if (!searchData) {
+      searchData = memoryStorage.get(`search:${id}`);
+    }
 
     if (!searchData) {
-      return NextResponse.json(
-        { error: 'Search not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Search not found' }, { status: 404 });
     }
 
     return NextResponse.json(searchData);
-
   } catch (error) {
     console.error('获取搜索状态失败:', error);
     return NextResponse.json(
-      { 
-        error: "获取搜索状态失败",
-        code: "STATUS_FETCH_FAILED",
-        details: error instanceof Error ? error.message : String(error)
-      },
+      { error: '获取搜索状态失败' },
       { status: 500 }
     );
   }

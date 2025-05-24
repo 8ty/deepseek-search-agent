@@ -79,17 +79,14 @@ jobs:
         
         # 根据静默模式和调试模式决定输出级别
         if [ "$SILENT_MODE" = "true" ] && [ "$DEBUG_MODE" = "false" ]; then
-          echo "🔇 静默模式已启用 - 隐藏详细输出"
-          echo "⚡ 搜索进行中，请稍候..."
+          echo "🔇 静默模式已启用"
+          echo "⚡ 搜索进行中..."
           
-          # 静默执行，只保留最终结果
-          echo "::group::🔍 搜索执行中..."
-          python -m api.github_runner 2>/dev/null || {
-            echo "::endgroup::"
+          # 静默执行，完全隐藏详细输出
+          python -m api.github_runner >/dev/null 2>&1 || {
             echo "❌ 搜索执行失败"
             exit 1
           }
-          echo "::endgroup::"
           echo "✅ 搜索完成"
           
         elif [ "$DEBUG_MODE" = "true" ]; then
@@ -145,7 +142,7 @@ jobs:
         token: ${{ secrets.GH_TOKEN }}
         repository: ${{ github.repository }}
         retain_days: 0
-        keep_minimum_runs: 0
-        delete_workflow_by_state_pattern: 'ALL'
-        delete_run_by_conclusion_pattern: 'ALL'
-        dry_run: ${{ github.event.client_payload.debug_mode || inputs.debug_mode || 'false' }}
+        keep_minimum_runs: 1
+        delete_workflow_by_state_pattern: 'cancelled,failure,success,skipped'
+        delete_run_by_conclusion_pattern: 'cancelled,failure,success,skipped'
+        dry_run: false

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import memoryStorage from '../../../lib/storage';
+import { put } from '@vercel/edge-config';
 
 // 注意：在生产环境中应该使用真实的数据库或KV存储
 // 目前使用共享内存存储进行演示
@@ -71,86 +72,42 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const searchParams = new URL(request.url).searchParams;
-    const searchId = searchParams.get('id');
+    const body = await request.json();
+    console.log('接收到 webhook 数据:', body);
+
+    const { searchId, status, results, error } = body;
 
     if (!searchId) {
-      return NextResponse.json(
-        { error: 'Missing search ID' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '缺少 searchId' }, { status: 400 });
     }
 
-    const payload = await request.json();
-    const { type, data, timestamp } = payload;
-
-    if (!type || !data || !timestamp) {
-      return NextResponse.json(
-        { error: 'Invalid payload format' },
-        { status: 400 }
-      );
-    }
-
-    // 获取现有的搜索数据
-    let existingData: any = null;
-
-    // 使用共享存储
-    existingData = memoryStorage.get(`search:${searchId}`);
-
-    // 初始化或更新搜索数据
-    const searchData = existingData || {
-      status: 'pending',
-      createdAt: timestamp,
-      updates: [],
-      iterations: [],
-      result: null
+    // 准备搜索数据
+    const searchData = {
+      status: status || 'completed',
+      results: results || null,
+      error: error || null,
+      updatedAt: new Date().toISOString()
     };
 
-    // 根据更新类型进行处理
-    switch (type) {
-      case 'start':
-        searchData.status = 'processing';
-        searchData.query = data.task;
-        searchData.updates.push({ type, timestamp, data });
-        break;
-
-      case 'iteration':
-        searchData.iterations.push({
-          round: data.round,
-          timestamp,
-          workspace_state: data.workspace_state,
-          tool_calls: data.tool_calls
-        });
-        searchData.updates.push({ type, timestamp, data: { round: data.round } });
-        break;
-
-      case 'complete':
-        searchData.status = 'completed';
-        searchData.result = data.answer;
-        searchData.updates.push({ type, timestamp });
-        break;
-
-      case 'error':
-      case 'timeout':
-        searchData.status = 'failed';
-        searchData.error = data.message || data.error;
-        searchData.updates.push({ type, timestamp, data });
-        break;
+    // 存储到Edge Config（如果可用）
+    try {
+      await put(`search_${searchId}`, searchData);
+      console.log(`搜索结果已存储到Edge Config: search_${searchId}`);
+    } catch (edgeConfigError) {
+      console.warn('Edge Config存储失败，使用内存存储:', edgeConfigError);
+      // 回退到内存存储
+      memoryStorage.set(`search:${searchId}`, searchData);
     }
 
-    // 保存更新的数据
-    memoryStorage.set(`search:${searchId}`, searchData);
-
-    return NextResponse.json({
-      success: true,
-      searchId
+    return NextResponse.json({ 
+      success: true, 
+      message: '搜索结果已保存' 
     });
 
   } catch (error) {
-    console.error('Error processing webhook:', error);
-
+    console.error('Webhook 处理失败:', error);
     return NextResponse.json(
-      { error: 'Failed to process webhook' },
+      { error: 'Webhook 处理失败' },
       { status: 500 }
     );
   }

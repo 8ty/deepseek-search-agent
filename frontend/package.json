@@ -16,7 +16,8 @@
     "socket.io-client": "^4.7.2",
     "axios": "^1.6.0",
     "uuid": "^9.0.1",
-    "@vercel/kv": "latest"
+    "@vercel/kv": "latest",
+    "@vercel/edge-config": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.8.10",
