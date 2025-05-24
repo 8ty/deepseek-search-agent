@@ -142,7 +142,7 @@ jobs:
         token: ${{ secrets.GH_TOKEN }}
         repository: ${{ github.repository }}
         retain_days: 0
-        keep_minimum_runs: 1
-        delete_workflow_by_state_pattern: 'cancelled,failure,success,skipped'
-        delete_run_by_conclusion_pattern: 'cancelled,failure,success,skipped'
+        keep_minimum_runs: 2
+        # delete_workflow_by_state_pattern: 'completed'
+        # delete_run_by_conclusion_pattern: 'success,failure,cancelled,skipped'
         dry_run: false
