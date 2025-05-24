@@ -27,6 +27,11 @@ on:
         required: false
         type: boolean
         default: false
+      silent_mode:
+        description: '静默模式（隐藏详细输出）'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   search:
@@ -62,6 +67,7 @@ jobs:
         MAX_ROUNDS: ${{ github.event.client_payload.max_rounds || inputs.max_rounds }}
         INCLUDE_SCRAPING: ${{ github.event.client_payload.include_scraping || 'true' }}
         DEBUG_MODE: ${{ github.event.client_payload.debug_mode || inputs.debug_mode || 'false' }}
+        SILENT_MODE: ${{ github.event.client_payload.silent_mode || inputs.silent_mode || 'true' }}
         # GitHub 信息
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_REF: ${{ github.ref }}
@@ -71,7 +77,22 @@ jobs:
       run: |
         echo "🚀 启动 DeepSeek 搜索代理"
         
-        if [ "$DEBUG_MODE" = "true" ]; then
+        # 根据静默模式和调试模式决定输出级别
+        if [ "$SILENT_MODE" = "true" ] && [ "$DEBUG_MODE" = "false" ]; then
+          echo "🔇 静默模式已启用 - 隐藏详细输出"
+          echo "⚡ 搜索进行中，请稍候..."
+          
+          # 静默执行，只保留最终结果
+          echo "::group::🔍 搜索执行中..."
+          python -m api.github_runner 2>/dev/null || {
+            echo "::endgroup::"
+            echo "❌ 搜索执行失败"
+            exit 1
+          }
+          echo "::endgroup::"
+          echo "✅ 搜索完成"
+          
+        elif [ "$DEBUG_MODE" = "true" ]; then
           echo "🐛 调试模式已启用 - 显示详细信息"
           echo "📋 搜索查询: $SEARCH_QUERY"
           echo "📞 回调 URL: $CALLBACK_URL"
@@ -80,24 +101,39 @@ jobs:
           echo "🔧 包含抓取: $INCLUDE_SCRAPING"
           echo "🌍 环境: $ENVIRONMENT"
           echo "🔍 调试模式: $DEBUG_MODE"
+          echo "🔇 静默模式: $SILENT_MODE"
+          
+          # 调试模式显示所有输出
+          python -m api.github_runner
+          
         else
           echo "🔍 正在处理搜索请求..."
           echo "⚡ 搜索进行中，请稍候..."
+          
+          # 标准模式，隐藏详细输出但保留错误信息
+          echo "::group::🔍 搜索详细日志"
+          python -m api.github_runner || {
+            echo "::endgroup::"
+            echo "❌ 搜索执行失败，请检查日志"
+            exit 1
+          }
+          echo "::endgroup::"
+          echo "✅ 搜索任务完成"
         fi
-        
-        # 使用新的迭代搜索架构运行搜索代理
-        python -m api.github_runner
         
     - name: 📋 输出执行信息
       if: always()
       env:
         DEBUG_MODE: ${{ github.event.client_payload.debug_mode || inputs.debug_mode || 'false' }}
+        SILENT_MODE: ${{ github.event.client_payload.silent_mode || inputs.silent_mode || 'true' }}
       run: |
         if [ "$DEBUG_MODE" = "true" ]; then
           echo "✅ 搜索代理执行完成"
           echo "⏰ 执行时间: $(date)"
           echo "🔧 运行环境: ${{ runner.os }}"
           echo "🐍 Python 版本: $(python --version)"
+        elif [ "$SILENT_MODE" = "true" ]; then
+          echo "✅ 任务执行完毕"
         else
           echo "✅ 搜索任务已完成"
         fi

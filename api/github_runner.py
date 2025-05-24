@@ -321,12 +321,13 @@ class Prompt:
 class GitHubSearchAgent:
     """GitHub Actions 搜索代理"""
     
-    def __init__(self, task: str, callback_url: str = None, current_date: str = None, search_id: str = None, debug_mode: bool = False):
+    def __init__(self, task: str, callback_url: str = None, current_date: str = None, search_id: str = None, debug_mode: bool = False, silent_mode: bool = False):
         self.task = task
         self.current_date = current_date or datetime.now().strftime("%Y-%m-%d")
         self.callback_url = callback_url
         self.search_id = search_id or f"search-{int(datetime.now().timestamp() * 1000)}"
         self.debug_mode = debug_mode
+        self.silent_mode = silent_mode
         self.tool_records = None
         self.workspace = Workspace()
         self.round = 0
@@ -483,7 +484,7 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
     async def send_update(self, update_type: str, data: Dict[str, Any]):
         """发送更新到回调URL"""
         if not self.callback_url:
-            if self.debug_mode:
+            if self.debug_mode and not self.silent_mode:
                 print(f"📤 Update [{update_type}]: {json.dumps(data, ensure_ascii=False, indent=2)}")
             return
             
@@ -502,13 +503,13 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 async with session.post(callback_url_with_id, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        if self.debug_mode:
+                        if self.debug_mode and not self.silent_mode:
                             print(f"❌ Failed to send update: {error_text}")
                     else:
-                        if self.debug_mode:
+                        if self.debug_mode and not self.silent_mode:
                             print(f"✅ Update sent: {update_type}")
         except Exception as e:
-            if self.debug_mode:
+            if self.debug_mode and not self.silent_mode:
                 print(f"❌ Error sending update: {str(e)}")
 
     async def run_tool(self, tool_id: str, tool_input: str, context: str | None = None) -> str:
@@ -518,7 +519,7 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
             result = await tool(tool_input, context)
             return result
         except Exception as e:
-            if self.debug_mode:
+            if self.debug_mode and not self.silent_mode:
                 print(f"❌ Failed to run tool {e}")
                 print(traceback.format_exc())
             return f"Tool execution failed: {e}"
@@ -526,14 +527,14 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
     async def run(self, max_rounds: int = 5) -> Dict[str, Any]:
         """运行搜索代理"""
         
-        if self.debug_mode:
+        if self.debug_mode and not self.silent_mode:
             print("🔄 搜索代理开始运行...")
         
         # 发送初始状态
-        if self.debug_mode:
+        if self.debug_mode and not self.silent_mode:
             print("📤 发送初始状态更新...")
         await self.send_update("start", {"task": self.task})
-        if self.debug_mode:
+        if self.debug_mode and not self.silent_mode:
             print("✅ 初始状态更新发送完成")
         
         consecutive_failures = 0
@@ -541,7 +542,7 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
         
         while self.round < max_rounds:
             try:
-                if self.debug_mode:
+                if self.debug_mode and not self.silent_mode:
                     print(f"\n🔄 === Round {self.round + 1} ===")
                     print(f"🤖 准备调用OpenRouter API...")
                     print(f"📝 Prompt参数: task={self.task[:50]}..., workspace长度={len(self.workspace.to_string())}")
@@ -553,25 +554,25 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                     "tool_records": self.tool_records,
                 })
                 
-                if self.debug_mode:
+                if self.debug_mode and not self.silent_mode:
                     print(f"✅ OpenRouter API调用成功，响应长度: {len(response)}")
                     print(f"📄 响应前200字符: {response[:200]}...")
 
                 # 清除思考部分
                 response = re.sub(r"(?:<think>)?.*?</think>", "", response, flags=re.DOTALL)
                 
-                if self.debug_mode:
+                if self.debug_mode and not self.silent_mode:
                     print("🔍 开始提取JSON响应...")
                 # 提取JSON响应
                 response_json = extract_largest_json(response)
                 
                 if not response_json:
-                    if self.debug_mode:
+                    if self.debug_mode and not self.silent_mode:
                         print("❌ Failed to extract JSON from response")
                         print(f"📄 完整响应: {response}")
                     break
                 
-                if self.debug_mode:
+                if self.debug_mode and not self.silent_mode:
                     print(f"✅ JSON提取成功: {list(response_json.keys())}")
 
                 # 检查是否过早结束（在前3轮内设置DONE但没有有效答案）
@@ -581,7 +582,7 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 if (status_update == "DONE" and self.round < 3 and 
                     (not answer or len(answer.strip()) < 50 or "failed" in answer.lower() or "error" in answer.lower())):
                     
-                    if self.debug_mode:
+                    if self.debug_mode and not self.silent_mode:
                         print(f"⚠️ Detecting premature completion in round {self.round + 1}")
                         print(f"🔄 Forcing continuation to explore more options...")
                     
@@ -602,7 +603,7 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                             {"tool": "search", "input": f"{self.task} meaning definition"}
                         ]
                 
-                if self.debug_mode:
+                if self.debug_mode and not self.silent_mode:
                     print("📝 更新工作空间...")
                 # 更新工作区
                 self.workspace.update_blocks(
@@ -610,7 +611,7 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                     response_json.get("memory_updates", []),
                     response_json.get("answer", None),
                 )
-                if self.debug_mode:
+                if self.debug_mode and not self.silent_mode:
                     print("✅ 工作空间更新完成")
                 
                 # 记录迭代结果
@@ -624,16 +625,16 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 
                 self.iteration_results.append(iteration_result)
                 
-                if self.debug_mode:
+                if self.debug_mode and not self.silent_mode:
                     print("📤 发送迭代更新...")
                 # 发送迭代更新
                 await self.send_update("iteration", iteration_result)
-                if self.debug_mode:
+                if self.debug_mode and not self.silent_mode:
                     print("✅ 迭代更新发送完成")
 
                 # 检查是否已完成（使用更新后的状态）
                 if self.workspace.is_done():
-                    if self.debug_mode:
+                    if self.debug_mode and not self.silent_mode:
                         print("🎉 任务已完成!")
                     final_answer = response_json.get("answer", "")
                     await self.send_update("complete", {
@@ -646,13 +647,13 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 # 执行工具调用
                 tool_calls = response_json.get("tool_calls", [])
                 if not tool_calls:
-                    if self.debug_mode:
+                    if self.debug_mode and not self.silent_mode:
                         print("⚠️ No tool calls in response")
                     consecutive_failures += 1
                     
                     # 如果连续多轮没有工具调用，且轮数还不多，强制继续
                     if consecutive_failures >= 2 and self.round < max_rounds - 1:
-                        if self.debug_mode:
+                        if self.debug_mode and not self.silent_mode:
                             print("🔄 Adding fallback search to continue exploration...")
                         tool_calls = [{"tool": "search", "input": f"information about {self.task}"}]
                     else:
@@ -662,7 +663,7 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 
                 total_tool_calls += len(tool_calls)
                 
-                if self.debug_mode:
+                if self.debug_mode and not self.silent_mode:
                     print(f"🛠️ 执行 {len(tool_calls)} 个工具调用...")
                     for i, call in enumerate(tool_calls):
                         print(f"  {i+1}. {call['tool']}: {call['input'][:100]}...")
@@ -672,10 +673,10 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                     for call in tool_calls
                 ]
                 
-                if self.debug_mode:
+                if self.debug_mode and not self.silent_mode:
                     print("⚠️ 开始并发执行工具 - 这里可能会卡住...")
                 tool_outputs = await asyncio.gather(*tasks)
-                if self.debug_mode:
+                if self.debug_mode and not self.silent_mode:
                     print("✅ 工具执行完成!")
                 
                 # 检查工具输出质量
@@ -683,10 +684,10 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 for i, output in enumerate(tool_outputs):
                     if output and not output.startswith("Tool execution failed") and not "failed" in output.lower():
                         successful_outputs += 1
-                    if self.debug_mode:
+                    if self.debug_mode and not self.silent_mode:
                         print(f"  工具 {i+1} 输出长度: {len(output)}")
                 
-                if self.debug_mode:
+                if self.debug_mode and not self.silent_mode:
                     print(f"📊 Tool success rate this round: {successful_outputs}/{len(tool_calls)}")
                 
                 # 记录工具输出
@@ -699,7 +700,7 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 self.tool_records = tool_records
 
             except Exception as e:
-                if self.debug_mode:
+                if self.debug_mode and not self.silent_mode:
                     print(f"❌ Error in agent loop: {str(e)}")
                     print(traceback.format_exc())
                 await self.send_update("error", {"error": str(e), "traceback": traceback.format_exc()})
@@ -708,17 +709,17 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
             # 增加轮次计数
             self.round += 1
             
-            if self.debug_mode:
+            if self.debug_mode and not self.silent_mode:
                 print(f"😴 轮次 {self.round} 完成，休息2秒...")
             # GitHub Actions中稍微延迟避免API限制
             await asyncio.sleep(2)
         
-        if self.debug_mode:
+        if self.debug_mode and not self.silent_mode:
             print("🏁 搜索循环结束")
         
         # 如果达到最大轮数但任务未完成
         if not self.workspace.is_done() and self.round >= max_rounds:
-            if self.debug_mode:
+            if self.debug_mode and not self.silent_mode:
                 print("⏰ 达到最大轮数限制")
             # 生成总结性答案
             summary_answer = f"搜索完成 {self.round} 轮迭代，共执行 {total_tool_calls} 次工具调用。"
@@ -735,7 +736,7 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 "summary": summary_answer
             })
         
-        if self.debug_mode:
+        if self.debug_mode and not self.silent_mode:
             print("📋 准备返回最终结果...")
         final_result = {
             "search_id": self.search_id,
@@ -746,7 +747,7 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
             "total_rounds": self.round,
             "total_tool_calls": total_tool_calls
         }
-        if self.debug_mode:
+        if self.debug_mode and not self.silent_mode:
             print("✅ 最终结果准备完成")
         
         return final_result
@@ -758,10 +759,10 @@ class GitHubRunner:
     def __init__(self):
         self.settings = get_settings()
 
-    async def run_iterative_search(self, query: str, callback_url: str = None, max_rounds: int = 5, search_id: str = None, debug_mode: bool = False) -> Dict[str, Any]:
+    async def run_iterative_search(self, query: str, callback_url: str = None, max_rounds: int = 5, search_id: str = None, debug_mode: bool = False, silent_mode: bool = False) -> Dict[str, Any]:
         """运行迭代搜索"""
         try:
-            if debug_mode:
+            if debug_mode and not silent_mode:
                 print(f"🔄 开始迭代搜索: {query}")
                 print(f"📞 回调URL: {callback_url}")
                 print(f"🔄 最大轮数: {max_rounds}")
@@ -772,10 +773,11 @@ class GitHubRunner:
                 task=query,
                 callback_url=callback_url,
                 search_id=search_id,
-                debug_mode=debug_mode
+                debug_mode=debug_mode,
+                silent_mode=silent_mode
             )
             
-            if debug_mode:
+            if debug_mode and not silent_mode:
                 print("✅ 搜索代理创建成功")
                 print(f"🆔 搜索ID: {agent.search_id}")
                 print("🎯 开始运行搜索代理...")
@@ -784,7 +786,7 @@ class GitHubRunner:
             # 运行搜索
             result = await agent.run(max_rounds=max_rounds)
             
-            if debug_mode:
+            if debug_mode and not silent_mode:
                 print("✅ 搜索代理运行完成!")
                 print(f"📊 搜索结果概览: is_complete={result.get('is_complete')}, total_rounds={result.get('total_rounds')}")
             
@@ -795,7 +797,7 @@ class GitHubRunner:
                 "error": f"迭代搜索失败: {str(e)}",
                 "success": False
             }
-            if debug_mode:
+            if debug_mode and not silent_mode:
                 print(f"❌ 搜索过程发生错误: {error_result}")
                 traceback.print_exc()
             return error_result
@@ -888,8 +890,9 @@ async def main():
     workspace_id = os.getenv("WORKSPACE_ID", f"ws-{int(datetime.now().timestamp() * 1000)}")
     environment = os.getenv("ENVIRONMENT", "production")
     debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    silent_mode = os.getenv("SILENT_MODE", "false").lower() == "true"
 
-    if debug_mode:
+    if debug_mode and not silent_mode:
         print(f"📋 搜索查询: {query}")
         print(f"📞 回调 URL: {callback_url}")
         print(f"🏠 工作空间: {workspace_id}")
@@ -897,44 +900,52 @@ async def main():
         print(f"🔧 包含抓取: {include_scraping}")
         print(f"🌍 环境: {environment}")
         print(f"🐛 调试模式: {debug_mode}")
+        print(f"🔇 静默模式: {silent_mode}")
         
         runner.check_environment()
-    else:
+    elif not silent_mode:
         print("🔍 搜索任务进行中...")
     
     is_valid, errors = runner.validate_environment()
     if not is_valid:
-        print("❌ 环境验证失败:")
-        for error in errors:
-            print(f"  - {error}")
+        if not silent_mode:
+            print("❌ 环境验证失败:")
+            for error in errors:
+                print(f"  - {error}")
         sys.exit(1)
     
-    print("✅ 环境验证通过")
+    if not silent_mode:
+        print("✅ 环境验证通过")
     
     if not query:
-        print("❌ 缺少搜索查询参数 (SEARCH_QUERY)")
+        if not silent_mode:
+            print("❌ 缺少搜索查询参数 (SEARCH_QUERY)")
         sys.exit(1)
     
     try:
         # 执行搜索
-        result = await runner.run_iterative_search(query, callback_url, max_rounds, workspace_id, debug_mode)
+        result = await runner.run_iterative_search(query, callback_url, max_rounds, workspace_id, debug_mode, silent_mode)
         
         # 输出结果
-        print("\n" + "=" * 50)
-        print("📋 执行结果:")
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        if not silent_mode:
+            print("\n" + "=" * 50)
+            print("📋 执行结果:")
+            print(json.dumps(result, ensure_ascii=False, indent=2))
         
         # 设置退出码
         if result.get("is_complete", False) or (not result.get("error")):
-            print("✅ 执行成功")
+            if not silent_mode:
+                print("✅ 执行成功")
             sys.exit(0)
         else:
-            print("❌ 执行失败")
+            if not silent_mode:
+                print("❌ 执行失败")
             sys.exit(1)
             
     except Exception as e:
-        print(f"❌ 执行过程中发生错误: {str(e)}")
-        print(traceback.format_exc())
+        if not silent_mode:
+            print(f"❌ 执行过程中发生错误: {str(e)}")
+            print(traceback.format_exc())
         sys.exit(1)
 
 
