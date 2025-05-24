@@ -19,6 +19,7 @@ export default function Home() {
   const [silentMode, setSilentMode] = useState(true); // 默认启用静默模式
   const [maxRounds, setMaxRounds] = useState(5); // 新增：最大迭代次数设定
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false); // 新增：高级选项显示状态
+  const [enableUserInteraction, setEnableUserInteraction] = useState(false); // 新增：用户交互模式
 
   // 从 localStorage 加载设置
   useEffect(() => {
@@ -72,7 +73,8 @@ export default function Home() {
         max_rounds: maxRounds,
         include_scraping: true,
         debug_mode: debugMode, // 传递debug模式状态
-        silent_mode: silentMode // 传递静默模式状态
+        silent_mode: silentMode, // 传递静默模式状态
+        enable_user_interaction: enableUserInteraction // 传递用户交互模式状态
       };
 
       // 如果环境变量未配置且用户提供了手动配置
@@ -489,6 +491,73 @@ export default function Home() {
                   </span>
                 </div>
               </div>
+            </div>
+
+            {/* 用户交互模式开关 */}
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
+                 style={{
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'space-between',
+                   padding: '12px',
+                   backgroundColor: enableUserInteraction ? '#eff6ff' : '#f9fafb',
+                   borderRadius: '8px',
+                   border: enableUserInteraction ? '1px solid #3b82f6' : '1px solid #e5e7eb'
+                 }}>
+              <div>
+                <label className="text-sm font-medium text-gray-700"
+                       style={{
+                         fontSize: '0.875rem',
+                         fontWeight: '500',
+                         color: '#374151'
+                       }}>
+                  🤝 用户交互模式
+                </label>
+                <p className="text-xs text-gray-500 mt-1"
+                   style={{
+                     fontSize: '0.75rem',
+                     color: '#6b7280',
+                     marginTop: '4px'
+                   }}>
+                  {enableUserInteraction ? '已启用：搜索达到最大轮次时等待您的指示' : '启用后可在搜索过程中选择继续探索或生成结果'}
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={enableUserInteraction}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEnableUserInteraction(e.target.checked)}
+                />
+                <div
+                  className={`w-11 h-6 rounded-full shadow-inner transition-colors ${
+                    enableUserInteraction ? 'bg-blue-500' : 'bg-gray-300'
+                  }`}
+                  style={{
+                    width: '44px',
+                    height: '24px',
+                    borderRadius: '12px',
+                    backgroundColor: enableUserInteraction ? '#3b82f6' : '#d1d5db',
+                    transition: 'background-color 0.2s'
+                  }}
+                >
+                  <div
+                    className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+                      enableUserInteraction ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                    style={{
+                      width: '16px',
+                      height: '16px',
+                      backgroundColor: 'white',
+                      borderRadius: '8px',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                      transform: enableUserInteraction ? 'translateX(20px)' : 'translateX(4px)',
+                      transition: 'transform 0.2s',
+                      marginTop: '4px'
+                    }}
+                  />
+                </div>
+              </label>
             </div>
           </div>
 
