@@ -73,44 +73,161 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    console.log('接收到 webhook 数据:', body);
+    console.log('=== WEBHOOK POST 接收数据 ===');
+    console.log('完整请求体:', JSON.stringify(body, null, 2));
 
-    const { searchId, status, results, error } = body;
+    // 从URL参数获取search_id（GitHub Action发送时会在URL中）
+    const url = new URL(request.url);
+    const searchId = url.searchParams.get('id');
+    console.log('URL参数中的search_id:', searchId);
 
     if (!searchId) {
-      return NextResponse.json({ error: '缺少 searchId' }, { status: 400 });
+      console.error('缺少search_id参数');
+      return NextResponse.json({ error: '缺少 searchId 参数' }, { status: 400 });
     }
 
-    // 准备搜索数据
-    const searchData = {
-      status: status || 'completed',
-      results: results || null,
-      error: error || null,
-      updatedAt: new Date().toISOString()
+    // 解析GitHub Action发送的数据格式
+    const { type, data, timestamp } = body;
+    console.log('数据类型:', type);
+    console.log('数据内容:', data);
+
+    // 获取现有搜索数据
+    let existingData = memoryStorage.get(`search:${searchId}`) || {
+      search_id: searchId,
+      status: 'pending',
+      iterations: [],
+      query: data?.task || data?.query || 'Unknown',
+      createdAt: new Date().toISOString(),
+      results: null
     };
 
-    // 存储到Vercel Blob（如果可用）
+    // 根据更新类型处理数据
+    let updatedData = { ...existingData };
+    
+    switch (type) {
+      case 'start':
+        updatedData.status = 'running';
+        updatedData.query = data?.task || updatedData.query;
+        console.log('搜索开始:', data?.task);
+        break;
+        
+      case 'iteration':
+        updatedData.status = 'running';
+        if (data) {
+          updatedData.iterations = updatedData.iterations || [];
+          updatedData.iterations.push({
+            round: data.round,
+            timestamp: timestamp || new Date().toISOString(),
+            workspace_state: data.workspace_state,
+            tool_calls: data.tool_calls,
+            response_json: data.response_json,
+            raw_response: data.raw_response
+          });
+        }
+        console.log(`迭代更新 - 轮次 ${data?.round}:`, data?.tool_calls?.length || 0, '个工具调用');
+        break;
+        
+      case 'complete':
+        updatedData.status = 'completed';
+        if (data) {
+          updatedData.answer = data.answer;
+          updatedData.total_rounds = data.total_rounds;
+          updatedData.iterations = data.iterations || updatedData.iterations;
+          updatedData.results = {
+            answer: data.answer,
+            iterations: data.iterations,
+            total_rounds: data.total_rounds,
+            completedAt: timestamp || new Date().toISOString()
+          };
+        }
+        console.log('搜索完成:', data?.answer?.substring(0, 100) + '...');
+        break;
+        
+      case 'timeout':
+        updatedData.status = 'timeout';
+        if (data) {
+          updatedData.message = data.message;
+          updatedData.summary = data.summary;
+          updatedData.iterations = data.iterations || updatedData.iterations;
+          updatedData.final_state = data.final_state;
+          updatedData.results = {
+            status: 'timeout',
+            message: data.message,
+            summary: data.summary,
+            iterations: data.iterations,
+            final_state: data.final_state,
+            completedAt: timestamp || new Date().toISOString()
+          };
+        }
+        console.log('搜索超时:', data?.message);
+        break;
+        
+      case 'error':
+        updatedData.status = 'error';
+        if (data) {
+          updatedData.error = data.error;
+          updatedData.traceback = data.traceback;
+          updatedData.results = {
+            status: 'error',
+            error: data.error,
+            traceback: data.traceback,
+            completedAt: timestamp || new Date().toISOString()
+          };
+        }
+        console.log('搜索错误:', data?.error);
+        break;
+        
+      default:
+        console.warn('未知的更新类型:', type);
+    }
+
+    updatedData.updatedAt = new Date().toISOString();
+
+    // 存储到内存
+    memoryStorage.set(`search:${searchId}`, updatedData);
+    console.log('数据已存储到内存存储');
+
+    // 存储到Vercel Blob
     try {
-      await put(`searches/${searchId}.json`, JSON.stringify(searchData), {
+      const blobData = {
+        search_id: searchId,
+        status: updatedData.status,
+        query: updatedData.query,
+        results: updatedData.results,
+        iterations: updatedData.iterations,
+        answer: updatedData.answer,
+        error: updatedData.error,
+        createdAt: updatedData.createdAt,
+        updatedAt: updatedData.updatedAt,
+        total_rounds: updatedData.total_rounds,
+        message: updatedData.message,
+        summary: updatedData.summary,
+        final_state: updatedData.final_state,
+        traceback: updatedData.traceback
+      };
+
+      await put(`searches/${searchId}.json`, JSON.stringify(blobData), {
         access: 'public',
         addRandomSuffix: false
       });
-      console.log(`搜索结果已存储到Vercel Blob: searches/${searchId}.json`);
+      console.log(`搜索数据已存储到Vercel Blob: searches/${searchId}.json`);
     } catch (blobError) {
       console.warn('Vercel Blob存储失败，使用内存存储:', blobError);
-      // 回退到内存存储
-      memoryStorage.set(`search:${searchId}`, searchData);
     }
 
+    console.log('=== WEBHOOK 处理完成 ===');
     return NextResponse.json({ 
       success: true, 
-      message: '搜索结果已保存' 
+      message: '搜索数据已保存',
+      search_id: searchId,
+      type: type,
+      status: updatedData.status
     });
 
   } catch (error) {
     console.error('Webhook 处理失败:', error);
     return NextResponse.json(
-      { error: 'Webhook 处理失败' },
+      { error: 'Webhook 处理失败', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

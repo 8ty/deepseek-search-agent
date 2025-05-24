@@ -1,0 +1,90 @@
+name: 🐛 调试搜索代理
+
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: '搜索查询'
+        required: true
+        type: string
+        default: '如何使用 React 18 的新特性？'
+      callback_url:
+        description: '回调 URL'
+        required: false
+        type: string
+        default: 'https://your-app.vercel.app/api/webhook'
+      max_rounds:
+        description: '最大迭代轮数'
+        required: false
+        type: string
+        default: '2'
+
+jobs:
+  debug-search:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    
+    steps:
+    - name: 🛠️ 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 🐍 设置 Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+        
+    - name: 📦 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: 🔍 调试模式执行搜索
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
+        ENVIRONMENT: "production"
+        SEARCH_QUERY: ${{ inputs.query }}
+        CALLBACK_URL: ${{ inputs.callback_url }}
+        WORKSPACE_ID: debug-${{ github.run_number }}
+        MAX_ROUNDS: ${{ inputs.max_rounds }}
+        INCLUDE_SCRAPING: 'true'
+        DEBUG_MODE: 'true'
+        SILENT_MODE: 'false'
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_REF: ${{ github.ref }}
+        GITHUB_SHA: ${{ github.sha }}
+        GITHUB_ACTIONS: "true"
+        RUNNER_OS: ${{ runner.os }}
+      run: |
+        echo "🐛 调试模式已启用 - 显示详细信息"
+        echo "📋 搜索查询: $SEARCH_QUERY"
+        echo "📞 回调 URL: $CALLBACK_URL"
+        echo "🏠 工作空间: $WORKSPACE_ID"
+        echo "🔄 最大轮数: $MAX_ROUNDS"
+        echo "🔧 包含抓取: $INCLUDE_SCRAPING"
+        echo "🌍 环境: $ENVIRONMENT"
+        echo "🔍 调试模式: $DEBUG_MODE"
+        echo "🔇 静默模式: $SILENT_MODE"
+        echo ""
+        echo "🚀 开始执行调试搜索..."
+        echo ""
+        
+        # 调试模式显示所有输出
+        python -m api.github_runner
+        
+    - name: 📋 输出调试信息
+      if: always()
+      run: |
+        echo "✅ 调试搜索代理执行完成"
+        echo "⏰ 执行时间: $(date)"
+        echo "🔧 运行环境: ${{ runner.os }}"
+        echo "🐍 Python 版本: $(python --version)"
+        echo ""
+        echo "📝 调试提示："
+        echo "1. 检查上述日志中的webhook调用信息"
+        echo "2. 确认callback URL是否正确"
+        echo "3. 查看是否有webhook发送错误"
+        echo "4. 在您的应用中查看搜索ID: debug-${{ github.run_number }}" 
