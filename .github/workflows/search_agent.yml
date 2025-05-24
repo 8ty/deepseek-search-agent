@@ -2,7 +2,7 @@ name: 🧪 项目测试和验证
 
 on:
   repository_dispatch:
-    types: [run_tests]
+    types: [search_trigger]
   workflow_dispatch:
     inputs:
       test_scope:
