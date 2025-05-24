@@ -336,6 +336,9 @@ class GitHubSearchAgent:
 
         # 在初始化时创建工具实例，而不是在类定义时
         self.tools = {"search": SearchTool(), "scrape": ScrapTool()}
+        
+        # 添加模型实例
+        self.model = OpenRouterModel()
 
         # 创建提示模板
         self.prompt = Prompt(self._get_prompt_template())
