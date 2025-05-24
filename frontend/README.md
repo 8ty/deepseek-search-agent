@@ -43,6 +43,12 @@ frontend/
    - `GITHUB_TOKEN`: 用于触发GitHub Actions的令牌
    - `REPOSITORY`: GitHub仓库名称(格式: owner/repo)
 
+1. 在Vercel Dashboard中，进入Storage页面
+2. 选择"Edge Config"
+3. 创建新的Edge Config
+4. 复制连接字符串到`EDGE_CONFIG`环境变量
+
+这个可以自动链接
 ## 本地开发
 
 ```bash
