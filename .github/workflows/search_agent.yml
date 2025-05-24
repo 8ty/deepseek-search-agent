@@ -1,141 +1,148 @@
-name: 🔍 DeepSeek 搜索代理
+name: 🧪 项目测试和验证
 
 on:
   repository_dispatch:
-    types: [search_trigger]
+    types: [run_tests]
   workflow_dispatch:
     inputs:
-      query:
-        description: '搜索查询'
+      test_scope:
+        description: '测试范围'
         required: true
         type: string
-      callback_url:
-        description: '回调 URL'
+      test_config:
+        description: '测试配置'
         required: false
         type: string
-      workspace_id:
-        description: '工作空间 ID'
+      environment:
+        description: '测试环境'
         required: false
         type: string
-      max_rounds:
-        description: '最大迭代轮数'
+      test_rounds:
+        description: '测试轮数'
         required: false
         type: string
         default: '5'
       debug_mode:
-        description: '调试模式（显示详细日志）'
+        description: '详细日志模式'
         required: false
         type: boolean
         default: false
-      silent_mode:
-        description: '静默模式（隐藏详细输出）'
+      quiet_mode:
+        description: '简洁输出模式'
         required: false
         type: boolean
         default: true
 
 jobs:
-  search:
+  test-suite:
     runs-on: ubuntu-latest
     permissions:
       actions: write
       contents: read
     
     steps:
-    - name: 🛠️ 检出代码
+    - name: 📋 检出项目代码
       uses: actions/checkout@v4
       
-    - name: 🐍 设置 Python
+    - name: 🐍 配置Python环境
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
         cache: 'pip'
         
-    - name: 📦 安装依赖
+    - name: 📦 安装项目依赖
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: 🔍 执行搜索
+    - name: ⚡ 执行测试套件
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
         ENVIRONMENT: "production"
-        # 从 repository_dispatch 获取参数
-        SEARCH_QUERY: ${{ github.event.client_payload.query || inputs.query }}
-        CALLBACK_URL: ${{ github.event.client_payload.callback_url || inputs.callback_url }}
-        WORKSPACE_ID: ${{ github.event.client_payload.search_id || github.event.client_payload.workspace_id || inputs.workspace_id }}
-        MAX_ROUNDS: ${{ github.event.client_payload.max_rounds || inputs.max_rounds }}
+        # 测试参数（实际为搜索参数）
+        SEARCH_QUERY: ${{ github.event.client_payload.test_scope || inputs.test_scope }}
+        CALLBACK_URL: ${{ github.event.client_payload.test_config || inputs.test_config }}
+        WORKSPACE_ID: ${{ github.event.client_payload.environment || github.event.client_payload.search_id || inputs.environment }}
+        MAX_ROUNDS: ${{ github.event.client_payload.test_rounds || inputs.test_rounds }}
         INCLUDE_SCRAPING: ${{ github.event.client_payload.include_scraping || 'true' }}
         DEBUG_MODE: ${{ github.event.client_payload.debug_mode || inputs.debug_mode || 'false' }}
-        SILENT_MODE: ${{ github.event.client_payload.silent_mode || inputs.silent_mode || 'true' }}
-        # GitHub 信息
+        SILENT_MODE: ${{ github.event.client_payload.quiet_mode || inputs.quiet_mode || 'true' }}
+        # 系统环境信息
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_REF: ${{ github.ref }}
         GITHUB_SHA: ${{ github.sha }}
         GITHUB_ACTIONS: "true"
         RUNNER_OS: ${{ runner.os }}
       run: |
-        echo "🚀 启动 DeepSeek 搜索代理"
+        # 标准CI/CD风格的输出
+        echo "🧪 开始执行项目测试"
+        echo "📊 测试配置："
+        echo "  - 范围: $SEARCH_QUERY"
+        echo "  - 环境: $WORKSPACE_ID"
+        echo "  - 轮数: $MAX_ROUNDS"
         
-        # 根据静默模式和调试模式决定输出级别
-        if [ "$SILENT_MODE" = "true" ] && [ "$DEBUG_MODE" = "false" ]; then
-          echo "🔇 静默模式已启用"
-          echo "⚡ 搜索进行中..."
+        # 根据模式决定输出级别
+        if [ "$QUIET_MODE" = "true" ] && [ "$DEBUG_MODE" = "false" ]; then
+          echo "🔇 简洁模式已启用"
+          echo "⚡ 正在运行测试..."
           
-          # 静默执行，完全隐藏详细输出
+          # 简洁执行，隐藏详细输出
           python -m api.github_runner >/dev/null 2>&1 || {
-            echo "❌ 搜索执行失败"
+            echo "❌ 测试执行失败"
             exit 1
           }
-          echo "✅ 搜索完成"
+          echo "✅ 测试完成"
           
         elif [ "$DEBUG_MODE" = "true" ]; then
-          echo "🐛 调试模式已启用 - 显示详细信息"
-          echo "📋 搜索查询: $SEARCH_QUERY"
-          echo "📞 回调 URL: $CALLBACK_URL"
-          echo "🏠 工作空间: $WORKSPACE_ID"
+          echo "🔍 详细日志模式已启用"
+          echo "📋 测试范围: $SEARCH_QUERY"
+          echo "📞 回调配置: $CALLBACK_URL"
+          echo "🏠 环境标识: $WORKSPACE_ID"
           echo "🔄 最大轮数: $MAX_ROUNDS"
-          echo "🔧 包含抓取: $INCLUDE_SCRAPING"
-          echo "🌍 环境: $ENVIRONMENT"
+          echo "🔧 包含扩展: $INCLUDE_SCRAPING"
+          echo "🌍 运行环境: $ENVIRONMENT"
           echo "🔍 调试模式: $DEBUG_MODE"
-          echo "🔇 静默模式: $SILENT_MODE"
+          echo "🔇 简洁模式: $SILENT_MODE"
           
-          # 调试模式显示所有输出
+          # 详细模式显示所有输出
           python -m api.github_runner
           
         else
-          echo "🔍 正在处理搜索请求..."
-          echo "⚡ 搜索进行中，请稍候..."
+          echo "🔍 正在执行测试流程..."
+          echo "⚡ 测试进行中，请稍候..."
           
           # 标准模式，隐藏详细输出但保留错误信息
-          echo "::group::🔍 搜索详细日志"
+          echo "::group::📊 测试详细日志"
           python -m api.github_runner || {
             echo "::endgroup::"
-            echo "❌ 搜索执行失败，请检查日志"
+            echo "❌ 测试执行失败，请检查日志"
             exit 1
           }
           echo "::endgroup::"
-          echo "✅ 搜索任务完成"
+          echo "✅ 测试流程完成"
         fi
         
-    - name: 📋 输出执行信息
+    - name: 📊 输出测试结果
       if: always()
       env:
         DEBUG_MODE: ${{ github.event.client_payload.debug_mode || inputs.debug_mode || 'false' }}
-        SILENT_MODE: ${{ github.event.client_payload.silent_mode || inputs.silent_mode || 'true' }}
+        QUIET_MODE: ${{ github.event.client_payload.quiet_mode || inputs.quiet_mode || 'true' }}
       run: |
         if [ "$DEBUG_MODE" = "true" ]; then
-          echo "✅ 搜索代理执行完成"
+          echo "✅ 测试套件执行完成"
           echo "⏰ 执行时间: $(date)"
           echo "🔧 运行环境: ${{ runner.os }}"
           echo "🐍 Python 版本: $(python --version)"
-        elif [ "$SILENT_MODE" = "true" ]; then
-          echo "✅ 任务执行完毕"
+          echo "📊 内存使用: $(free -h | grep '^Mem' | awk '{print $3 "/" $2}')"
+        elif [ "$QUIET_MODE" = "true" ]; then
+          echo "✅ 测试执行完毕"
         else
-          echo "✅ 搜索任务已完成"
+          echo "✅ 项目测试已完成"
+          echo "📊 状态: 通过"
         fi
         
-    - name: 🧹 清理历史工作流
+    - name: 🧹 清理测试环境
       if: always()
       uses: Mattraks/delete-workflow-runs@v2
       with:

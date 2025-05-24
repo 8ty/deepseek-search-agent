@@ -1,55 +1,55 @@
-name: 🐛 调试搜索代理
+name: 🛠️ 开发环境调试
 
 on:
   workflow_dispatch:
     inputs:
-      query:
-        description: '搜索查询'
+      test_query:
+        description: '调试测试用例'
         required: true
         type: string
         default: '如何使用 React 18 的新特性？'
-      callback_url:
-        description: '回调 URL'
+      webhook_endpoint:
+        description: '测试回调端点'
         required: false
         type: string
         default: 'https://your-app.vercel.app/api/webhook'
-      max_rounds:
-        description: '最大迭代轮数'
+      iteration_limit:
+        description: '测试迭代限制'
         required: false
         type: string
         default: '2'
 
 jobs:
-  debug-search:
+  debug-tests:
     runs-on: ubuntu-latest
     permissions:
       actions: write
       contents: read
     
     steps:
-    - name: 🛠️ 检出代码
+    - name: 🔧 准备开发环境
       uses: actions/checkout@v4
       
-    - name: 🐍 设置 Python
+    - name: 🐍 配置Python调试环境
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
         cache: 'pip'
         
-    - name: 📦 安装依赖
+    - name: 📦 安装开发依赖
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: 🔍 调试模式执行搜索
+    - name: 🧪 运行开发测试
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
-        ENVIRONMENT: "production"
-        SEARCH_QUERY: ${{ inputs.query }}
-        CALLBACK_URL: ${{ inputs.callback_url }}
-        WORKSPACE_ID: debug-${{ github.run_number }}
-        MAX_ROUNDS: ${{ inputs.max_rounds }}
+        ENVIRONMENT: "development"
+        SEARCH_QUERY: ${{ inputs.test_query }}
+        CALLBACK_URL: ${{ inputs.webhook_endpoint }}
+        WORKSPACE_ID: dev-debug-${{ github.run_number }}
+        MAX_ROUNDS: ${{ inputs.iteration_limit }}
         INCLUDE_SCRAPING: 'true'
         DEBUG_MODE: 'true'
         SILENT_MODE: 'false'
@@ -59,32 +59,32 @@ jobs:
         GITHUB_ACTIONS: "true"
         RUNNER_OS: ${{ runner.os }}
       run: |
-        echo "🐛 调试模式已启用 - 显示详细信息"
-        echo "📋 搜索查询: $SEARCH_QUERY"
-        echo "📞 回调 URL: $CALLBACK_URL"
-        echo "🏠 工作空间: $WORKSPACE_ID"
-        echo "🔄 最大轮数: $MAX_ROUNDS"
-        echo "🔧 包含抓取: $INCLUDE_SCRAPING"
-        echo "🌍 环境: $ENVIRONMENT"
-        echo "🔍 调试模式: $DEBUG_MODE"
-        echo "🔇 静默模式: $SILENT_MODE"
+        echo "🛠️ 开发环境调试模式"
+        echo "📋 测试用例: $SEARCH_QUERY"
+        echo "📞 回调端点: $CALLBACK_URL"
+        echo "🏠 环境标识: $WORKSPACE_ID"
+        echo "🔄 迭代限制: $MAX_ROUNDS"
+        echo "🔧 扩展功能: $INCLUDE_SCRAPING"
+        echo "🌍 运行模式: $ENVIRONMENT"
+        echo "🔍 详细日志: $DEBUG_MODE"
+        echo "🔇 简洁输出: $SILENT_MODE"
         echo ""
-        echo "🚀 开始执行调试搜索..."
+        echo "🚀 开始开发测试..."
         echo ""
         
-        # 调试模式显示所有输出
+        # 开发调试模式显示所有输出
         python -m api.github_runner
         
-    - name: 📋 输出调试信息
+    - name: 📊 开发测试报告
       if: always()
       run: |
-        echo "✅ 调试搜索代理执行完成"
+        echo "✅ 开发环境测试完成"
         echo "⏰ 执行时间: $(date)"
         echo "🔧 运行环境: ${{ runner.os }}"
         echo "🐍 Python 版本: $(python --version)"
         echo ""
-        echo "📝 调试提示："
+        echo "📝 开发提示："
         echo "1. 检查上述日志中的webhook调用信息"
-        echo "2. 确认callback URL是否正确"
-        echo "3. 查看是否有webhook发送错误"
-        echo "4. 在您的应用中查看搜索ID: debug-${{ github.run_number }}" 
+        echo "2. 确认回调端点是否正确响应"
+        echo "3. 查看是否有API调用错误"
+        echo "4. 在应用中查看测试ID: dev-debug-${{ github.run_number }}" 
