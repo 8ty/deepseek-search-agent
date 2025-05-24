@@ -71,7 +71,8 @@ export async function POST(request: NextRequest) {
       search_id: searchId,
       max_rounds: body.max_rounds || 5,
       include_scraping: body.include_scraping !== false,
-      callback_url: body.callback_url || getCallbackUrl(request)
+      callback_url: body.callback_url || getCallbackUrl(request),
+      debug_mode: body.debug_mode || false
     };
 
     // 触发 GitHub Actions（如果配置了Token和Repository）

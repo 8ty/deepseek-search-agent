@@ -321,11 +321,12 @@ class Prompt:
 class GitHubSearchAgent:
     """GitHub Actions 搜索代理"""
     
-    def __init__(self, task: str, callback_url: str = None, current_date: str = None, search_id: str = None):
+    def __init__(self, task: str, callback_url: str = None, current_date: str = None, search_id: str = None, debug_mode: bool = False):
         self.task = task
         self.current_date = current_date or datetime.now().strftime("%Y-%m-%d")
         self.callback_url = callback_url
         self.search_id = search_id or f"search-{int(datetime.now().timestamp() * 1000)}"
+        self.debug_mode = debug_mode
         self.tool_records = None
         self.workspace = Workspace()
         self.round = 0
@@ -449,6 +450,13 @@ You must respond with a valid JSON object containing:
 - **PERSISTENCE**: Don't give up too early! Try multiple approaches and search strategies
 - Only include the "answer" field when status is "DONE"
 
+## 重要提醒
+- **输出语言**: 请使用中文回答问题，提供中文的最终答案
+- **信息验证**: 特别注意时间敏感信息的验证，确保信息的时效性
+- **彻底探索**: 在得出最终答案前，尽可能彻底探索所有相关线索
+- **来源引用**: 在最终答案中明确引用信息来源的URL
+- **持续性**: 不要因为工具失败就过早放弃，尝试多种搜索策略
+
 Task:
 ```
 {{ task }}
@@ -475,7 +483,8 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
     async def send_update(self, update_type: str, data: Dict[str, Any]):
         """发送更新到回调URL"""
         if not self.callback_url:
-            print(f"📤 Update [{update_type}]: {json.dumps(data, ensure_ascii=False, indent=2)}")
+            if self.debug_mode:
+                print(f"📤 Update [{update_type}]: {json.dumps(data, ensure_ascii=False, indent=2)}")
             return
             
         # 构建带有search_id的回调URL
@@ -493,11 +502,14 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 async with session.post(callback_url_with_id, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        print(f"❌ Failed to send update: {error_text}")
+                        if self.debug_mode:
+                            print(f"❌ Failed to send update: {error_text}")
                     else:
-                        print(f"✅ Update sent: {update_type}")
+                        if self.debug_mode:
+                            print(f"✅ Update sent: {update_type}")
         except Exception as e:
-            print(f"❌ Error sending update: {str(e)}")
+            if self.debug_mode:
+                print(f"❌ Error sending update: {str(e)}")
 
     async def run_tool(self, tool_id: str, tool_input: str, context: str | None = None) -> str:
         try:
@@ -506,29 +518,33 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
             result = await tool(tool_input, context)
             return result
         except Exception as e:
-            print(f"❌ Failed to run tool {e}")
-            print(traceback.format_exc())
+            if self.debug_mode:
+                print(f"❌ Failed to run tool {e}")
+                print(traceback.format_exc())
             return f"Tool execution failed: {e}"
 
     async def run(self, max_rounds: int = 5) -> Dict[str, Any]:
         """运行搜索代理"""
         
-        print("🔄 搜索代理开始运行...")
+        if self.debug_mode:
+            print("🔄 搜索代理开始运行...")
         
         # 发送初始状态
-        print("📤 发送初始状态更新...")
+        if self.debug_mode:
+            print("📤 发送初始状态更新...")
         await self.send_update("start", {"task": self.task})
-        print("✅ 初始状态更新发送完成")
+        if self.debug_mode:
+            print("✅ 初始状态更新发送完成")
         
         consecutive_failures = 0
         total_tool_calls = 0
         
         while self.round < max_rounds:
             try:
-                print(f"\n🔄 === Round {self.round + 1} ===")
-                
-                print(f"🤖 准备调用OpenRouter API...")
-                print(f"📝 Prompt参数: task={self.task[:50]}..., workspace长度={len(self.workspace.to_string())}")
+                if self.debug_mode:
+                    print(f"\n🔄 === Round {self.round + 1} ===")
+                    print(f"🤖 准备调用OpenRouter API...")
+                    print(f"📝 Prompt参数: task={self.task[:50]}..., workspace长度={len(self.workspace.to_string())}")
                 
                 response = await self.prompt.run({
                     "current_date": self.current_date,
@@ -537,22 +553,26 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                     "tool_records": self.tool_records,
                 })
                 
-                print(f"✅ OpenRouter API调用成功，响应长度: {len(response)}")
-                print(f"📄 响应前200字符: {response[:200]}...")
+                if self.debug_mode:
+                    print(f"✅ OpenRouter API调用成功，响应长度: {len(response)}")
+                    print(f"📄 响应前200字符: {response[:200]}...")
 
                 # 清除思考部分
                 response = re.sub(r"(?:<think>)?.*?</think>", "", response, flags=re.DOTALL)
                 
-                print("🔍 开始提取JSON响应...")
+                if self.debug_mode:
+                    print("🔍 开始提取JSON响应...")
                 # 提取JSON响应
                 response_json = extract_largest_json(response)
                 
                 if not response_json:
-                    print("❌ Failed to extract JSON from response")
-                    print(f"📄 完整响应: {response}")
+                    if self.debug_mode:
+                        print("❌ Failed to extract JSON from response")
+                        print(f"📄 完整响应: {response}")
                     break
                 
-                print(f"✅ JSON提取成功: {list(response_json.keys())}")
+                if self.debug_mode:
+                    print(f"✅ JSON提取成功: {list(response_json.keys())}")
 
                 # 检查是否过早结束（在前3轮内设置DONE但没有有效答案）
                 status_update = response_json.get("status_update", "IN_PROGRESS")
@@ -561,8 +581,9 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 if (status_update == "DONE" and self.round < 3 and 
                     (not answer or len(answer.strip()) < 50 or "failed" in answer.lower() or "error" in answer.lower())):
                     
-                    print(f"⚠️ Detecting premature completion in round {self.round + 1}")
-                    print(f"🔄 Forcing continuation to explore more options...")
+                    if self.debug_mode:
+                        print(f"⚠️ Detecting premature completion in round {self.round + 1}")
+                        print(f"🔄 Forcing continuation to explore more options...")
                     
                     # 强制设置为IN_PROGRESS并添加指导记忆块
                     response_json["status_update"] = "IN_PROGRESS"
@@ -581,14 +602,16 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                             {"tool": "search", "input": f"{self.task} meaning definition"}
                         ]
                 
-                print("📝 更新工作空间...")
+                if self.debug_mode:
+                    print("📝 更新工作空间...")
                 # 更新工作区
                 self.workspace.update_blocks(
                     response_json.get("status_update", "IN_PROGRESS"),
                     response_json.get("memory_updates", []),
                     response_json.get("answer", None),
                 )
-                print("✅ 工作空间更新完成")
+                if self.debug_mode:
+                    print("✅ 工作空间更新完成")
                 
                 # 记录迭代结果
                 iteration_result = {
@@ -601,14 +624,17 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 
                 self.iteration_results.append(iteration_result)
                 
-                print("📤 发送迭代更新...")
+                if self.debug_mode:
+                    print("📤 发送迭代更新...")
                 # 发送迭代更新
                 await self.send_update("iteration", iteration_result)
-                print("✅ 迭代更新发送完成")
+                if self.debug_mode:
+                    print("✅ 迭代更新发送完成")
 
                 # 检查是否已完成（使用更新后的状态）
                 if self.workspace.is_done():
-                    print("🎉 任务已完成!")
+                    if self.debug_mode:
+                        print("🎉 任务已完成!")
                     final_answer = response_json.get("answer", "")
                     await self.send_update("complete", {
                         "answer": final_answer,
@@ -620,12 +646,14 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 # 执行工具调用
                 tool_calls = response_json.get("tool_calls", [])
                 if not tool_calls:
-                    print("⚠️ No tool calls in response")
+                    if self.debug_mode:
+                        print("⚠️ No tool calls in response")
                     consecutive_failures += 1
                     
                     # 如果连续多轮没有工具调用，且轮数还不多，强制继续
                     if consecutive_failures >= 2 and self.round < max_rounds - 1:
-                        print("🔄 Adding fallback search to continue exploration...")
+                        if self.debug_mode:
+                            print("🔄 Adding fallback search to continue exploration...")
                         tool_calls = [{"tool": "search", "input": f"information about {self.task}"}]
                     else:
                         break
@@ -634,27 +662,32 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 
                 total_tool_calls += len(tool_calls)
                 
-                print(f"🛠️ 执行 {len(tool_calls)} 个工具调用...")
-                for i, call in enumerate(tool_calls):
-                    print(f"  {i+1}. {call['tool']}: {call['input'][:100]}...")
+                if self.debug_mode:
+                    print(f"🛠️ 执行 {len(tool_calls)} 个工具调用...")
+                    for i, call in enumerate(tool_calls):
+                        print(f"  {i+1}. {call['tool']}: {call['input'][:100]}...")
                 
                 tasks = [
                     self.run_tool(call["tool"], call["input"], self.task)
                     for call in tool_calls
                 ]
                 
-                print("⚠️ 开始并发执行工具 - 这里可能会卡住...")
+                if self.debug_mode:
+                    print("⚠️ 开始并发执行工具 - 这里可能会卡住...")
                 tool_outputs = await asyncio.gather(*tasks)
-                print("✅ 工具执行完成!")
+                if self.debug_mode:
+                    print("✅ 工具执行完成!")
                 
                 # 检查工具输出质量
                 successful_outputs = 0
                 for i, output in enumerate(tool_outputs):
                     if output and not output.startswith("Tool execution failed") and not "failed" in output.lower():
                         successful_outputs += 1
-                    print(f"  工具 {i+1} 输出长度: {len(output)}")
+                    if self.debug_mode:
+                        print(f"  工具 {i+1} 输出长度: {len(output)}")
                 
-                print(f"📊 Tool success rate this round: {successful_outputs}/{len(tool_calls)}")
+                if self.debug_mode:
+                    print(f"📊 Tool success rate this round: {successful_outputs}/{len(tool_calls)}")
                 
                 # 记录工具输出
                 tool_records = [
@@ -666,23 +699,27 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 self.tool_records = tool_records
 
             except Exception as e:
-                print(f"❌ Error in agent loop: {str(e)}")
-                print(traceback.format_exc())
+                if self.debug_mode:
+                    print(f"❌ Error in agent loop: {str(e)}")
+                    print(traceback.format_exc())
                 await self.send_update("error", {"error": str(e), "traceback": traceback.format_exc()})
                 break
             
             # 增加轮次计数
             self.round += 1
             
-            print(f"😴 轮次 {self.round} 完成，休息2秒...")
+            if self.debug_mode:
+                print(f"😴 轮次 {self.round} 完成，休息2秒...")
             # GitHub Actions中稍微延迟避免API限制
             await asyncio.sleep(2)
         
-        print("🏁 搜索循环结束")
+        if self.debug_mode:
+            print("🏁 搜索循环结束")
         
         # 如果达到最大轮数但任务未完成
         if not self.workspace.is_done() and self.round >= max_rounds:
-            print("⏰ 达到最大轮数限制")
+            if self.debug_mode:
+                print("⏰ 达到最大轮数限制")
             # 生成总结性答案
             summary_answer = f"搜索完成 {self.round} 轮迭代，共执行 {total_tool_calls} 次工具调用。"
             
@@ -698,7 +735,8 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 "summary": summary_answer
             })
         
-        print("📋 准备返回最终结果...")
+        if self.debug_mode:
+            print("📋 准备返回最终结果...")
         final_result = {
             "search_id": self.search_id,
             "iterations": self.iteration_results,
@@ -708,7 +746,8 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
             "total_rounds": self.round,
             "total_tool_calls": total_tool_calls
         }
-        print("✅ 最终结果准备完成")
+        if self.debug_mode:
+            print("✅ 最终结果准备完成")
         
         return final_result
 
@@ -719,31 +758,35 @@ class GitHubRunner:
     def __init__(self):
         self.settings = get_settings()
 
-    async def run_iterative_search(self, query: str, callback_url: str = None, max_rounds: int = 5, search_id: str = None) -> Dict[str, Any]:
+    async def run_iterative_search(self, query: str, callback_url: str = None, max_rounds: int = 5, search_id: str = None, debug_mode: bool = False) -> Dict[str, Any]:
         """运行迭代搜索"""
         try:
-            print(f"🔄 开始迭代搜索: {query}")
-            print(f"📞 回调URL: {callback_url}")
-            print(f"🔄 最大轮数: {max_rounds}")
+            if debug_mode:
+                print(f"🔄 开始迭代搜索: {query}")
+                print(f"📞 回调URL: {callback_url}")
+                print(f"🔄 最大轮数: {max_rounds}")
+                print("📝 创建搜索代理中...")
             
-            print("📝 创建搜索代理中...")
             # 创建搜索代理
             agent = GitHubSearchAgent(
                 task=query,
                 callback_url=callback_url,
-                search_id=search_id
+                search_id=search_id,
+                debug_mode=debug_mode
             )
-            print("✅ 搜索代理创建成功")
-            print(f"🆔 搜索ID: {agent.search_id}")
             
-            print("🎯 开始运行搜索代理...")
-            print("⚠️  这里可能会卡住 - 监控中...")
+            if debug_mode:
+                print("✅ 搜索代理创建成功")
+                print(f"🆔 搜索ID: {agent.search_id}")
+                print("🎯 开始运行搜索代理...")
+                print("⚠️  这里可能会卡住 - 监控中...")
             
             # 运行搜索
             result = await agent.run(max_rounds=max_rounds)
             
-            print("✅ 搜索代理运行完成!")
-            print(f"📊 搜索结果概览: is_complete={result.get('is_complete')}, total_rounds={result.get('total_rounds')}")
+            if debug_mode:
+                print("✅ 搜索代理运行完成!")
+                print(f"📊 搜索结果概览: is_complete={result.get('is_complete')}, total_rounds={result.get('total_rounds')}")
             
             return result
             
@@ -752,8 +795,9 @@ class GitHubRunner:
                 "error": f"迭代搜索失败: {str(e)}",
                 "success": False
             }
-            print(f"❌ 搜索过程发生错误: {error_result}")
-            traceback.print_exc()
+            if debug_mode:
+                print(f"❌ 搜索过程发生错误: {error_result}")
+                traceback.print_exc()
             return error_result
 
     async def run_from_env(self) -> Dict[str, Any]:
@@ -769,12 +813,14 @@ class GitHubRunner:
             
             callback_url = os.getenv("CALLBACK_URL")
             max_rounds = int(os.getenv("MAX_ROUNDS", "5"))
+            debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
             
-            print(f"🔍 从环境变量开始搜索: {query}")
+            if debug_mode:
+                print(f"🔍 从环境变量开始搜索: {query}")
             
             # 执行迭代搜索
             search_id = os.getenv("WORKSPACE_ID", f"search-{int(datetime.now().timestamp() * 1000)}")
-            result = await self.run_iterative_search(query, callback_url, max_rounds, search_id)
+            result = await self.run_iterative_search(query, callback_url, max_rounds, search_id, debug_mode)
             
             return result
             
@@ -835,21 +881,26 @@ async def main():
     print("🚀 启动 DeepSeek 搜索代理")
     
     # 从 GitHub Actions 环境变量获取参数
-    query = os.getenv("SEARCH_QUERY")  # 修复：使用正确的环境变量名
+    query = os.getenv("SEARCH_QUERY")
     callback_url = os.getenv("CALLBACK_URL")
     max_rounds = int(os.getenv("MAX_ROUNDS", "5"))
     include_scraping = os.getenv("INCLUDE_SCRAPING", "true").lower() == "true"
     workspace_id = os.getenv("WORKSPACE_ID", f"ws-{int(datetime.now().timestamp() * 1000)}")
     environment = os.getenv("ENVIRONMENT", "production")
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
 
-    print(f"📋 搜索查询: {query}")
-    print(f"📞 回调 URL: {callback_url}")
-    print(f"🏠 工作空间: {workspace_id}")
-    print(f"🔄 最大轮数: {max_rounds}")
-    print(f"🔧 包含抓取: {include_scraping}")
-    print(f"🌍 环境: {environment}")
-    
-    runner.check_environment()
+    if debug_mode:
+        print(f"📋 搜索查询: {query}")
+        print(f"📞 回调 URL: {callback_url}")
+        print(f"🏠 工作空间: {workspace_id}")
+        print(f"🔄 最大轮数: {max_rounds}")
+        print(f"🔧 包含抓取: {include_scraping}")
+        print(f"🌍 环境: {environment}")
+        print(f"🐛 调试模式: {debug_mode}")
+        
+        runner.check_environment()
+    else:
+        print("🔍 搜索任务进行中...")
     
     is_valid, errors = runner.validate_environment()
     if not is_valid:
@@ -861,12 +912,12 @@ async def main():
     print("✅ 环境验证通过")
     
     if not query:
-        print("❌ 缺少搜索查询参数 (QUERY)")
+        print("❌ 缺少搜索查询参数 (SEARCH_QUERY)")
         sys.exit(1)
     
     try:
         # 执行搜索
-        result = await runner.run_iterative_search(query, callback_url, max_rounds, workspace_id)
+        result = await runner.run_iterative_search(query, callback_url, max_rounds, workspace_id, debug_mode)
         
         # 输出结果
         print("\n" + "=" * 50)

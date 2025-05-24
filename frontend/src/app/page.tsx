@@ -15,6 +15,21 @@ export default function Home() {
   const [showManualConfig, setShowManualConfig] = useState(false);
   const [githubToken, setGithubToken] = useState('');
   const [githubRepository, setGithubRepository] = useState('');
+  const [debugMode, setDebugMode] = useState(false);
+
+  // 从 localStorage 加载设置
+  useEffect(() => {
+    const savedDebugMode = localStorage.getItem('deepseek-debug-mode');
+    if (savedDebugMode === 'true') {
+      setDebugMode(true);
+    }
+  }, []);
+
+  // 保存 debug 模式设置到 localStorage
+  const handleDebugModeChange = (enabled: boolean) => {
+    setDebugMode(enabled);
+    localStorage.setItem('deepseek-debug-mode', enabled.toString());
+  };
 
   // 检查配置状态
   useEffect(() => {
@@ -32,7 +47,8 @@ export default function Home() {
       const searchData: any = {
         query: query.trim(),
         max_rounds: 5,
-        include_scraping: true
+        include_scraping: true,
+        debug_mode: debugMode // 传递debug模式状态
       };
 
       // 如果环境变量未配置且用户提供了手动配置
@@ -151,7 +167,7 @@ export default function Home() {
           <div className="mb-6" style={{ marginBottom: '24px' }}>
             <textarea
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setQuery(e.target.value)}
               placeholder="请输入您的问题或搜索查询..."
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
               style={{
@@ -208,7 +224,7 @@ export default function Home() {
                     <input
                       type="password"
                       value={githubToken}
-                      onChange={(e) => setGithubToken(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGithubToken(e.target.value)}
                       placeholder="ghp_xxxxxxxxxxxx"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       style={{
@@ -233,7 +249,7 @@ export default function Home() {
                     <input
                       type="text"
                       value={githubRepository}
-                      onChange={(e) => setGithubRepository(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGithubRepository(e.target.value)}
                       placeholder="username/repository"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       style={{
@@ -248,6 +264,74 @@ export default function Home() {
               )}
             </div>
           )}
+
+          {/* Debug 模式开关 */}
+          <div className="mb-4 flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
+               style={{
+                 marginBottom: '16px',
+                 display: 'flex',
+                 alignItems: 'center',
+                 justifyContent: 'space-between',
+                 padding: '12px',
+                 backgroundColor: '#f9fafb',
+                 borderRadius: '8px',
+                 border: '1px solid #e5e7eb'
+               }}>
+            <div>
+              <label className="text-sm font-medium text-gray-700"
+                     style={{
+                       fontSize: '0.875rem',
+                       fontWeight: '500',
+                       color: '#374151'
+                     }}>
+                🐛 调试模式
+              </label>
+              <p className="text-xs text-gray-500 mt-1"
+                 style={{
+                   fontSize: '0.75rem',
+                   color: '#6b7280',
+                   marginTop: '4px'
+                 }}>
+                {debugMode ? '已启用详细日志输出' : '启用后显示搜索过程的详细信息'}
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                className="sr-only"
+                checked={debugMode}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleDebugModeChange(e.target.checked)}
+              />
+              <div
+                className={`w-11 h-6 rounded-full shadow-inner transition-colors ${
+                  debugMode ? 'bg-blue-500' : 'bg-gray-300'
+                }`}
+                style={{
+                  width: '44px',
+                  height: '24px',
+                  borderRadius: '12px',
+                  backgroundColor: debugMode ? '#3b82f6' : '#d1d5db',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                <div
+                  className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+                    debugMode ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                  style={{
+                    width: '16px',
+                    height: '16px',
+                    backgroundColor: 'white',
+                    borderRadius: '8px',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                    transform: debugMode ? 'translateX(20px)' : 'translateX(4px)',
+                    transition: 'transform 0.2s',
+                    marginTop: '4px'
+                  }}
+                />
+              </div>
+            </label>
+          </div>
 
           {/* 搜索按钮 */}
           <button
@@ -318,11 +402,11 @@ export default function Home() {
                   cursor: 'pointer',
                   transition: 'all 0.2s'
                 }}
-                onMouseEnter={(e) => {
+                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
                   e.currentTarget.style.backgroundColor = '#eff6ff';
                   e.currentTarget.style.borderColor = '#93c5fd';
                 }}
-                onMouseLeave={(e) => {
+                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
                   e.currentTarget.style.backgroundColor = '#f9fafb';
                   e.currentTarget.style.borderColor = '#e5e7eb';
                 }}
