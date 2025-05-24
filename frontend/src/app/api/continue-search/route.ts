@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import memoryStorage from '../../../lib/storage';
+import { get, put } from '@vercel/blob';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    const { search_id, workspace_id, max_rounds = 3, current_state } = body;
+    const { search_id, max_rounds = 3 } = body;
     
     if (!search_id) {
       return NextResponse.json(
@@ -14,23 +15,70 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 获取现有搜索数据
-    const existingSearch = memoryStorage.get(`search:${search_id}`);
-    if (!existingSearch) {
+    // 从Vercel Blob读取之前的搜索状态
+    let previousSearchState = null;
+    try {
+      const blobResponse = await get(`searches/${search_id}.json`);
+      if (blobResponse) {
+        const blobText = await blobResponse.text();
+        previousSearchState = JSON.parse(blobText);
+        console.log(`从Blob读取到搜索状态: ${search_id}`);
+      }
+    } catch (blobError) {
+      console.warn('从Blob读取搜索状态失败，尝试从内存读取:', blobError);
+    }
+
+    // 如果Blob中没有，尝试从内存读取
+    if (!previousSearchState) {
+      previousSearchState = memoryStorage.get(`search:${search_id}`);
+    }
+
+    if (!previousSearchState) {
       return NextResponse.json(
         { error: "未找到原始搜索数据" },
         { status: 404 }
       );
     }
 
-    // 更新搜索状态为运行中
-    const updatedSearchData = {
-      ...existingSearch,
+    // 生成新的搜索ID用于继续搜索
+    const newSearchId = `${search_id}-continue-${Date.now()}`;
+    
+    // 准备精简的搜索状态数据（只包含必要信息）
+    const compactSearchState = {
+      original_query: previousSearchState.query,
+      previous_iterations: previousSearchState.iterations?.map(iter => ({
+        round: iter.round,
+        timestamp: iter.timestamp,
+        workspace_state: iter.workspace_state,
+        summary: iter.tool_calls?.length > 0 ? `执行了${iter.tool_calls.length}个工具调用` : '无工具调用'
+      })) || [],
+      previous_result: previousSearchState.result || previousSearchState.answer,
+      total_previous_rounds: previousSearchState.iterations?.length || 0
+    };
+
+    // 更新内存中的搜索状态
+    const newSearchData = {
       status: 'running' as const,
-      updatedAt: new Date().toISOString()
+      query: previousSearchState.query,
+      createdAt: new Date().toISOString(),
+      iterations: [],
+      result: null,
+      search_id: newSearchId,
+      parent_search_id: search_id,
+      is_continuation: true
     };
     
-    memoryStorage.set(`search:${search_id}`, updatedSearchData);
+    memoryStorage.set(`search:${newSearchId}`, newSearchData);
+
+    // 将新搜索状态也存储到Blob
+    try {
+      await put(`searches/${newSearchId}.json`, JSON.stringify(newSearchData), {
+        access: 'public',
+        addRandomSuffix: false
+      });
+    } catch (blobError) {
+      console.warn('存储新搜索状态到Blob失败:', blobError);
+    }
 
     // 获取GitHub配置
     const envGithubToken = process.env.GITHUB_TOKEN;
@@ -43,21 +91,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 准备继续搜索的数据，映射到GitHub Actions期望的字段名
+    // 准备GitHub Actions数据（只传递必要信息）
     const continueSearchData = {
-      test_scope: existingSearch.query,          // GitHub Actions 期望 test_scope
-      test_config: getCallbackUrl(request),      // GitHub Actions 期望 test_config 
-      environment: search_id,                    // GitHub Actions 期望 environment
-      search_id: search_id,                      // 保留兼容
-      test_rounds: max_rounds,                   // GitHub Actions 期望 test_rounds
+      test_scope: `继续搜索：${previousSearchState.query}`,
+      test_config: getCallbackUrl(request),
+      environment: newSearchId,
+      search_id: newSearchId,
+      test_rounds: max_rounds,
       include_scraping: true,
       debug_mode: false,
-      quiet_mode: true,                          // GitHub Actions 期望 quiet_mode
-      continue_from_state: current_state,
-      is_continuation: true
+      quiet_mode: true,
+      // 传递精简的上下文信息
+      previous_context: JSON.stringify(compactSearchState),
+      is_continuation: true,
+      parent_search_id: search_id
     };
 
-    // 触发GitHub Actions继续搜索（使用统一的 search_trigger 事件类型）
+    // 触发GitHub Actions继续搜索
     try {
       const githubResponse = await fetch(
         `https://api.github.com/repos/${envGithubRepository}/dispatches`,
@@ -69,7 +119,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            event_type: 'search_trigger',  // 使用统一的事件类型
+            event_type: 'search_trigger',
             client_payload: continueSearchData
           })
         }
@@ -84,14 +134,16 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      console.log('✅ GitHub Actions 继续搜索触发成功!');
+      console.log(`✅ GitHub Actions 继续搜索触发成功! 新搜索ID: ${newSearchId}`);
       
       return NextResponse.json({
         status: "continue_search_initiated",
         message: "继续搜索已启动",
-        search_id: search_id,
-        workspace_id: workspace_id,
-        additional_rounds: max_rounds
+        search_id: newSearchId,
+        parent_search_id: search_id,
+        additional_rounds: max_rounds,
+        // 返回新的搜索结果页面URL
+        redirect_url: `/results/${newSearchId}`
       });
 
     } catch (error) {

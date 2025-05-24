@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import memoryStorage from '../../../lib/storage';
+import { get, put } from '@vercel/blob';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    const { search_id, workspace_id, query, iterations, final_state } = body;
+    const { search_id } = body;
     
     if (!search_id) {
       return NextResponse.json(
@@ -14,23 +15,71 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 获取现有搜索数据
-    const existingSearch = memoryStorage.get(`search:${search_id}`);
-    if (!existingSearch) {
+    // 从Vercel Blob读取之前的搜索状态
+    let previousSearchState = null;
+    try {
+      const blobResponse = await get(`searches/${search_id}.json`);
+      if (blobResponse) {
+        const blobText = await blobResponse.text();
+        previousSearchState = JSON.parse(blobText);
+        console.log(`从Blob读取到搜索状态用于总结: ${search_id}`);
+      }
+    } catch (blobError) {
+      console.warn('从Blob读取搜索状态失败，尝试从内存读取:', blobError);
+    }
+
+    // 如果Blob中没有，尝试从内存读取
+    if (!previousSearchState) {
+      previousSearchState = memoryStorage.get(`search:${search_id}`);
+    }
+
+    if (!previousSearchState) {
       return NextResponse.json(
         { error: "未找到原始搜索数据" },
         { status: 404 }
       );
     }
 
-    // 更新搜索状态为处理中
-    const updatedSearchData = {
-      ...existingSearch,
+    // 生成新的搜索ID用于总结任务
+    const finalizeSearchId = `${search_id}-summary-${Date.now()}`;
+    
+    // 准备精简的历史数据用于总结
+    const summaryData = {
+      original_query: previousSearchState.query,
+      total_iterations: previousSearchState.iterations?.length || 0,
+      key_findings: previousSearchState.iterations?.map((iter, index) => ({
+        round: iter.round,
+        timestamp: iter.timestamp,
+        findings: iter.tool_calls?.map(call => `${call.tool}: ${call.input.substring(0, 100)}...`) || [],
+        workspace_summary: iter.workspace_state?.substring(0, 200) + '...' || ''
+      })) || [],
+      partial_result: previousSearchState.result || previousSearchState.answer || '搜索过程中收集的信息需要进一步整理',
+      completion_status: previousSearchState.status
+    };
+
+    // 创建新的搜索数据用于总结任务
+    const finalizeSearchData = {
       status: 'processing' as const,
-      updatedAt: new Date().toISOString()
+      query: `基于现有信息生成最终结果：${previousSearchState.query}`,
+      createdAt: new Date().toISOString(),
+      iterations: [],
+      result: null,
+      search_id: finalizeSearchId,
+      parent_search_id: search_id,
+      is_finalization: true
     };
     
-    memoryStorage.set(`search:${search_id}`, updatedSearchData);
+    memoryStorage.set(`search:${finalizeSearchId}`, finalizeSearchData);
+
+    // 将新搜索状态存储到Blob
+    try {
+      await put(`searches/${finalizeSearchId}.json`, JSON.stringify(finalizeSearchData), {
+        access: 'public',
+        addRandomSuffix: false
+      });
+    } catch (blobError) {
+      console.warn('存储总结任务状态到Blob失败:', blobError);
+    }
 
     // 获取GitHub配置
     const envGithubToken = process.env.GITHUB_TOKEN;
@@ -43,21 +92,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 准备生成最终结果的数据，映射到GitHub Actions期望的字段名
+    // 准备GitHub Actions数据（传递精简的总结信息）
     const finalizeData = {
-      test_scope: query,                         // GitHub Actions 期望 test_scope
-      test_config: getCallbackUrl(request),      // GitHub Actions 期望 test_config
-      environment: search_id,                    // GitHub Actions 期望 environment
-      search_id: search_id,                      // 保留兼容
-      test_rounds: 1,                            // GitHub Actions 期望 test_rounds，生成结果只需要1轮
-      iterations: iterations,
-      final_state: final_state,
+      test_scope: `总结并生成最终答案：${previousSearchState.query}`,
+      test_config: getCallbackUrl(request),
+      environment: finalizeSearchId,
+      search_id: finalizeSearchId,
+      test_rounds: 1, // 总结只需要1轮
+      include_scraping: false, // 总结任务不需要爬取新内容
       debug_mode: false,
-      quiet_mode: true,                          // GitHub Actions 期望 quiet_mode
-      action_type: 'finalize'
+      quiet_mode: true,
+      // 传递要总结的信息
+      summary_context: JSON.stringify(summaryData),
+      action_type: 'finalize',
+      parent_search_id: search_id
     };
 
-    // 触发GitHub Actions生成最终结果（使用统一的 search_trigger 事件类型）
+    // 触发GitHub Actions生成最终结果
     try {
       const githubResponse = await fetch(
         `https://api.github.com/repos/${envGithubRepository}/dispatches`,
@@ -69,7 +120,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            event_type: 'search_trigger',  // 使用统一的事件类型
+            event_type: 'search_trigger',
             client_payload: finalizeData
           })
         }
@@ -84,13 +135,15 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      console.log('✅ GitHub Actions 生成最终结果触发成功!');
+      console.log(`✅ GitHub Actions 生成最终结果触发成功! 总结搜索ID: ${finalizeSearchId}`);
       
       return NextResponse.json({
         status: "finalize_initiated",
         message: "正在基于现有信息生成最终结果",
-        search_id: search_id,
-        workspace_id: workspace_id
+        search_id: finalizeSearchId,
+        parent_search_id: search_id,
+        // 返回新的搜索结果页面URL
+        redirect_url: `/results/${finalizeSearchId}`
       });
 
     } catch (error) {

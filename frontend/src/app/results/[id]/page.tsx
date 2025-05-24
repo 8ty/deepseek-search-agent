@@ -141,17 +141,26 @@ const TimeoutHandler: React.FC<TimeoutHandlerProps> = ({
           },
           body: JSON.stringify({
             search_id: searchId,
-            workspace_id: workspaceId,
-            max_rounds: 3, // 额外的迭代次数
-            current_state: searchData.final_state
+            max_rounds: 3 // 额外的迭代次数
           }),
         });
 
         if (response.ok) {
-          // 重新加载页面以查看新的搜索状态
-          onContinueSearch();
+          const result = await response.json();
+          console.log('继续搜索响应:', result);
+          
+          // 如果有新的搜索ID，跳转到新的结果页面
+          if (result.search_id && result.redirect_url) {
+            window.location.href = result.redirect_url;
+          } else if (result.search_id) {
+            window.location.href = `/results/${result.search_id}`;
+          } else {
+            // 降级处理：重新加载当前页面
+            onContinueSearch();
+          }
         } else {
-          alert('继续搜索失败，请稍后重试');
+          const errorData = await response.json();
+          alert(`继续搜索失败：${errorData.error || '请稍后重试'}`);
         }
       } catch (error) {
         console.error('继续搜索请求失败:', error);
@@ -180,19 +189,26 @@ const TimeoutHandler: React.FC<TimeoutHandlerProps> = ({
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            search_id: searchId,
-            workspace_id: workspaceId,
-            query: searchData.query,
-            iterations: searchData.iterations,
-            final_state: searchData.final_state
+            search_id: searchId
           }),
         });
 
         if (response.ok) {
-          // 重新加载页面以查看最终结果
-          onContinueSearch();
+          const result = await response.json();
+          console.log('生成最终结果响应:', result);
+          
+          // 如果有新的搜索ID，跳转到新的结果页面
+          if (result.search_id && result.redirect_url) {
+            window.location.href = result.redirect_url;
+          } else if (result.search_id) {
+            window.location.href = `/results/${result.search_id}`;
+          } else {
+            // 降级处理：重新加载当前页面
+            onContinueSearch();
+          }
         } else {
-          alert('生成最终结果失败，请稍后重试');
+          const errorData = await response.json();
+          alert(`生成最终结果失败：${errorData.error || '请稍后重试'}`);
         }
       } catch (error) {
         console.error('生成最终结果请求失败:', error);
