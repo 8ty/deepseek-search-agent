@@ -918,37 +918,26 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 status_update = response_json.get("status_update", "IN_PROGRESS")
                 answer = response_json.get("answer", "")
                 
-                # 自我反省：在结束前检查答案质量
+                # 自我反省：在结束前检查答案质量 - 使用AI评估替代硬编码逻辑
                 if status_update == "DONE":
-                    need_continue = False
-                    reflection_reasons = []
+                    # 使用AI进行智能自我评估
+                    evaluation_result = await self.self_reflection_evaluation(
+                        answer=answer,
+                        current_round=self.round,
+                        tool_calls=response_json.get("tool_calls", []),
+                        workspace_state=self.workspace.to_string()
+                    )
                     
-                    # 检查答案质量
-                    if not answer or len(answer.strip()) < 100:
-                        need_continue = True
-                        reflection_reasons.append("答案过短，需要更详细的信息")
-                    
-                    # 检查是否包含错误指示
-                    error_indicators = ["failed", "error", "无法", "不能", "找不到", "无信息"]
-                    if any(indicator in answer.lower() for indicator in error_indicators):
-                        need_continue = True
-                        reflection_reasons.append("答案包含错误指示，需要尝试其他搜索策略")
-                    
-                    # 检查是否在早期轮次且工具调用成功率低
-                    if self.round < 2 and total_tool_calls < 3:
-                        need_continue = True
-                        reflection_reasons.append("早期轮次且工具调用较少，应该尝试更多搜索路径")
-                    
-                    # 检查是否有足够的信息来源
-                    tool_calls = response_json.get("tool_calls", [])
-                    if len(tool_calls) < 2 and self.round < 4:
-                        need_continue = True
-                        reflection_reasons.append("信息来源不足，需要更多样化的搜索")
+                    need_continue = evaluation_result.get("should_continue", False)
+                    reflection_reasons = evaluation_result.get("continue_reasons", [])
+                    suggested_searches = evaluation_result.get("suggested_searches", [])
+                    evaluation_summary = evaluation_result.get("evaluation_summary", "")
                     
                     # 如果需要继续，强制设置为IN_PROGRESS
                     if need_continue:
                         if self.debug_mode and not self.silent_mode:
-                            print(f"🤔 自我反省：检测到需要继续搜索")
+                            print(f"🤔 AI自我反思：需要继续搜索")
+                            print(f"   评估总结: {evaluation_summary}")
                             for reason in reflection_reasons:
                                 print(f"   - {reason}")
                         
@@ -956,50 +945,32 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                         if "memory_updates" not in response_json:
                             response_json["memory_updates"] = []
                         
-                        # 添加反省记忆块
+                        # 添加AI评估的反省记忆块
                         response_json["memory_updates"].append({
                             "operation": "add",
-                            "content": f"自我反省 (第{self.round + 1}轮): {'; '.join(reflection_reasons)}。需要继续探索更多信息源和搜索策略。"
+                            "content": f"AI自我评估 (第{self.round + 1}轮): {evaluation_summary}。评估建议: {'; '.join(reflection_reasons)}。"
                         })
                         
-                        # 如果没有工具调用，添加建议的调用
+                        # 如果没有工具调用，使用AI建议的搜索
                         if not response_json.get("tool_calls"):
-                            # 基于任务生成更智能的搜索查询
-                            task_keywords = self.task.split()[:3]  # 取前3个关键词
-                            response_json["tool_calls"] = [
-                                {"tool": "search", "input": f"{self.task} 详细解释"},
-                                {"tool": "search", "input": f"{' '.join(task_keywords)} 最新信息"}
-                            ]
-                            
-                            # 如果轮次较少，添加更多搜索角度
-                            if self.round < 2:
-                                response_json["tool_calls"].append(
-                                    {"tool": "search", "input": f"{self.task} 完整指南"}
-                                )
+                            if suggested_searches:
+                                # 使用AI建议的搜索策略
+                                response_json["tool_calls"] = [
+                                    {"tool": "search", "input": search_query}
+                                    for search_query in suggested_searches[:3]  # 最多3个建议搜索
+                                ]
+                            else:
+                                # 兜底：基于任务生成搜索查询
+                                task_keywords = self.task.split()[:3]
+                                response_json["tool_calls"] = [
+                                    {"tool": "search", "input": f"{self.task} 详细解释"},
+                                    {"tool": "search", "input": f"{' '.join(task_keywords)} 最新信息"}
+                                ]
                     else:
                         if self.debug_mode and not self.silent_mode:
-                            print("✅ 自我反省：答案质量良好，可以结束搜索")
-                
-                # 额外的自我反省：检查是否需要更深入的搜索
-                if status_update == "IN_PROGRESS" and self.round >= 3:
-                    # 检查最近几轮是否有进展
-                    recent_iterations = self.iteration_results[-2:] if len(self.iteration_results) >= 2 else []
-                    if recent_iterations:
-                        # 简单检查：如果最近的工具调用都失败了，尝试不同策略
-                        recent_tool_calls = sum(len(it.get("tool_calls", [])) for it in recent_iterations)
-                        if recent_tool_calls == 0:
-                            if "memory_updates" not in response_json:
-                                response_json["memory_updates"] = []
-                            response_json["memory_updates"].append({
-                                "operation": "add",
-                                "content": f"策略调整 (第{self.round + 1}轮): 最近轮次工具调用较少，尝试更基础的搜索词汇。"
-                            })
-                            
-                            # 添加更基础的搜索
-                            basic_terms = self.task.replace("如何", "").replace("什么是", "").strip()
-                            if not response_json.get("tool_calls"):
-                                response_json["tool_calls"] = [{"tool": "search", "input": basic_terms}]
-                
+                            print("✅ AI自我评估：答案质量满足要求，可以结束搜索")
+                            print(f"   评估总结: {evaluation_summary}")
+
                 if self.debug_mode and not self.silent_mode:
                     print("📝 更新工作空间...")
                 # 更新工作区
@@ -1148,6 +1119,136 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
             print("✅ 最终结果准备完成")
         
         return final_result
+
+    async def self_reflection_evaluation(self, answer: str, current_round: int, tool_calls: List[Dict], workspace_state: str) -> Dict[str, Any]:
+        """
+        使用DeepSeek R1进行自我反思评估，判断是否需要继续搜索
+        
+        Returns:
+            Dict containing evaluation results with 'should_continue' boolean and 'reasons' list
+        """
+        evaluation_prompt = f"""
+请作为一个智能搜索代理，对当前的搜索结果进行自我评估。
+
+# 评估标准
+
+请根据以下标准对当前答案进行评估：
+
+## 1. 答案完整性 (0-10分)
+- 答案是否完整回答了用户的问题？
+- 是否涵盖了问题的主要方面？
+- 是否有明显的信息缺失？
+
+## 2. 信息质量 (0-10分)  
+- 信息是否准确可信？
+- 是否有具体的事实和数据支撑？
+- 信息来源是否可靠？
+
+## 3. 答案深度 (0-10分)
+- 答案是否有足够的细节和解释？
+- 是否提供了背景和原理？
+- 是否有实用性和可操作性？
+
+## 4. 搜索策略评估 (0-10分)
+- 当前搜索策略是否有效？
+- 是否尝试了多样化的搜索角度？
+- 是否有遗漏的重要搜索方向？
+
+# 当前情况
+
+**用户查询:** {self.task}
+
+**当前轮次:** {current_round + 1}
+
+**当前答案:**
+{answer}
+
+**当前工作空间状态:**
+{workspace_state}
+
+**本轮工具调用数量:** {len(tool_calls)}
+
+# 评估任务
+
+请按照以下JSON格式返回评估结果：
+
+```json
+{{
+    "completeness_score": {{score}},
+    "quality_score": {{score}}, 
+    "depth_score": {{score}},
+    "strategy_score": {{score}},
+    "overall_score": {{total_score}},
+    "should_continue": {{true/false}},
+    "continue_reasons": [
+        "具体原因1",
+        "具体原因2"
+    ],
+    "suggested_searches": [
+        "建议的搜索1",
+        "建议的搜索2"
+    ],
+    "evaluation_summary": "简要评估总结"
+}}
+```
+
+# 决策逻辑
+
+- **总分 < 6分**: 需要继续搜索
+- **总分 6-7分**: 根据具体情况判断
+- **总分 > 7分**: 通常可以结束搜索
+- **特殊情况**: 即使分数较高，如果发现重要信息缺失也应继续
+
+请基于客观标准进行评估，确保答案真正满足用户需求。
+"""
+
+        try:
+            if self.debug_mode and not self.silent_mode:
+                print("🤔 启动AI自我反思评估...")
+            
+            # 调用模型进行评估
+            evaluation_response = await self.model(evaluation_prompt, reasoning_effort="medium")
+            
+            # 提取评估结果
+            evaluation_json = extract_largest_json(evaluation_response)
+            
+            if not evaluation_json:
+                if self.debug_mode and not self.silent_mode:
+                    print("⚠️ 评估JSON提取失败，使用默认逻辑")
+                # 如果提取失败，使用简化的默认判断
+                return {
+                    "should_continue": current_round < 2 or len(answer) < 100,
+                    "continue_reasons": ["模型评估失败，使用默认逻辑"],
+                    "suggested_searches": [],
+                    "evaluation_summary": "评估系统异常，采用保守策略"
+                }
+            
+            # 验证必要字段
+            required_fields = ["should_continue", "continue_reasons", "evaluation_summary"]
+            for field in required_fields:
+                if field not in evaluation_json:
+                    evaluation_json[field] = "未提供" if field != "should_continue" else False
+            
+            if self.debug_mode and not self.silent_mode:
+                overall_score = evaluation_json.get("overall_score", "未知")
+                should_continue = evaluation_json.get("should_continue", False)
+                print(f"🎯 AI评估结果: 总分 {overall_score}, 继续搜索: {should_continue}")
+                if evaluation_json.get("continue_reasons"):
+                    for reason in evaluation_json["continue_reasons"]:
+                        print(f"   - {reason}")
+            
+            return evaluation_json
+            
+        except Exception as e:
+            if self.debug_mode and not self.silent_mode:
+                print(f"❌ 自我评估异常: {str(e)}")
+            # 异常情况下的兜底逻辑
+            return {
+                "should_continue": current_round < 2,
+                "continue_reasons": [f"评估系统异常: {str(e)}"],
+                "suggested_searches": [],
+                "evaluation_summary": "评估系统异常，采用保守策略"
+            }
 
 
 class GitHubRunner:
