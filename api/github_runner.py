@@ -575,33 +575,91 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
                 if self.debug_mode and not self.silent_mode:
                     print(f"✅ JSON提取成功: {list(response_json.keys())}")
 
-                # 检查是否过早结束（在前3轮内设置DONE但没有有效答案）
+                # 检查是否过早结束 - 使用更智能的自我反省机制
                 status_update = response_json.get("status_update", "IN_PROGRESS")
                 answer = response_json.get("answer", "")
                 
-                if (status_update == "DONE" and self.round < 3 and 
-                    (not answer or len(answer.strip()) < 50 or "failed" in answer.lower() or "error" in answer.lower())):
+                # 自我反省：在结束前检查答案质量
+                if status_update == "DONE":
+                    need_continue = False
+                    reflection_reasons = []
                     
-                    if self.debug_mode and not self.silent_mode:
-                        print(f"⚠️ Detecting premature completion in round {self.round + 1}")
-                        print(f"🔄 Forcing continuation to explore more options...")
+                    # 检查答案质量
+                    if not answer or len(answer.strip()) < 100:
+                        need_continue = True
+                        reflection_reasons.append("答案过短，需要更详细的信息")
                     
-                    # 强制设置为IN_PROGRESS并添加指导记忆块
-                    response_json["status_update"] = "IN_PROGRESS"
-                    if "memory_updates" not in response_json:
-                        response_json["memory_updates"] = []
+                    # 检查是否包含错误指示
+                    error_indicators = ["failed", "error", "无法", "不能", "找不到", "无信息"]
+                    if any(indicator in answer.lower() for indicator in error_indicators):
+                        need_continue = True
+                        reflection_reasons.append("答案包含错误指示，需要尝试其他搜索策略")
                     
-                    response_json["memory_updates"].append({
-                        "operation": "add",
-                        "content": f"Previous attempt to end search was too early (round {self.round + 1}). Need to try more search strategies and approaches before concluding."
-                    })
+                    # 检查是否在早期轮次且工具调用成功率低
+                    if self.round < 2 and total_tool_calls < 3:
+                        need_continue = True
+                        reflection_reasons.append("早期轮次且工具调用较少，应该尝试更多搜索路径")
                     
-                    # 如果没有工具调用，添加一些建议的调用
-                    if not response_json.get("tool_calls"):
-                        response_json["tool_calls"] = [
-                            {"tool": "search", "input": f"{self.task} explanation"},
-                            {"tool": "search", "input": f"{self.task} meaning definition"}
-                        ]
+                    # 检查是否有足够的信息来源
+                    tool_calls = response_json.get("tool_calls", [])
+                    if len(tool_calls) < 2 and self.round < 4:
+                        need_continue = True
+                        reflection_reasons.append("信息来源不足，需要更多样化的搜索")
+                    
+                    # 如果需要继续，强制设置为IN_PROGRESS
+                    if need_continue:
+                        if self.debug_mode and not self.silent_mode:
+                            print(f"🤔 自我反省：检测到需要继续搜索")
+                            for reason in reflection_reasons:
+                                print(f"   - {reason}")
+                        
+                        response_json["status_update"] = "IN_PROGRESS"
+                        if "memory_updates" not in response_json:
+                            response_json["memory_updates"] = []
+                        
+                        # 添加反省记忆块
+                        response_json["memory_updates"].append({
+                            "operation": "add",
+                            "content": f"自我反省 (第{self.round + 1}轮): {'; '.join(reflection_reasons)}。需要继续探索更多信息源和搜索策略。"
+                        })
+                        
+                        # 如果没有工具调用，添加建议的调用
+                        if not response_json.get("tool_calls"):
+                            # 基于任务生成更智能的搜索查询
+                            task_keywords = self.task.split()[:3]  # 取前3个关键词
+                            response_json["tool_calls"] = [
+                                {"tool": "search", "input": f"{self.task} 详细解释"},
+                                {"tool": "search", "input": f"{' '.join(task_keywords)} 最新信息"}
+                            ]
+                            
+                            # 如果轮次较少，添加更多搜索角度
+                            if self.round < 2:
+                                response_json["tool_calls"].append(
+                                    {"tool": "search", "input": f"{self.task} 完整指南"}
+                                )
+                    else:
+                        if self.debug_mode and not self.silent_mode:
+                            print("✅ 自我反省：答案质量良好，可以结束搜索")
+                
+                # 额外的自我反省：检查是否需要更深入的搜索
+                if status_update == "IN_PROGRESS" and self.round >= 3:
+                    # 检查最近几轮是否有进展
+                    recent_iterations = self.iteration_results[-2:] if len(self.iteration_results) >= 2 else []
+                    if recent_iterations:
+                        # 简单检查：如果最近的工具调用都失败了，尝试不同策略
+                        recent_tool_calls = sum(len(it.get("tool_calls", [])) for it in recent_iterations)
+                        if recent_tool_calls == 0:
+                            if "memory_updates" not in response_json:
+                                response_json["memory_updates"] = []
+                            response_json["memory_updates"].append({
+                                "operation": "add",
+                                "content": f"策略调整 (第{self.round + 1}轮): 最近轮次工具调用较少，尝试更基础的搜索词汇。"
+                            })
+                            
+                            # 添加更基础的搜索
+                            basic_terms = self.task.replace("如何", "").replace("什么是", "").strip()
+                            if not response_json.get("tool_calls"):
+                                response_json["tool_calls"] = [{"tool": "search", "input": basic_terms}]
                 
                 if self.debug_mode and not self.silent_mode:
                     print("📝 更新工作空间...")
