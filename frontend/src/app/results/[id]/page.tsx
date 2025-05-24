@@ -6,7 +6,7 @@ import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 
 // 定义搜索状态类型
-type SearchStatus = 'pending' | 'processing' | 'completed' | 'failed';
+type SearchStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'running' | 'timeout' | 'error';
 
 // 定义迭代数据类型
 interface Iteration {
@@ -18,16 +18,38 @@ interface Iteration {
     input: string;
     output?: string;
   }>;
+  response_json?: any;
+  raw_response?: string;
 }
 
 // 定义搜索数据类型
 interface SearchData {
+  search_id?: string;
   status: SearchStatus;
   query: string;
   createdAt: string;
-  iterations: Iteration[];
-  result: string | null;
+  updatedAt?: string;
+  iterations?: Iteration[];
+  result?: string | null;
+  answer?: string;
   error?: string;
+  total_rounds?: number;
+  message?: string;
+  summary?: string;
+  final_state?: string;
+  traceback?: string;
+  results?: {
+    answer?: string;
+    iterations?: Iteration[];
+    total_rounds?: number;
+    completedAt?: string;
+    status?: string;
+    message?: string;
+    summary?: string;
+    final_state?: string;
+    error?: string;
+    traceback?: string;
+  };
 }
 
 // 定义 Debug 信息类型
@@ -99,7 +121,7 @@ export default function ResultPage() {
       setSearchData(response.data);
 
       // 如果搜索已完成或失败，停止轮询
-      if (response.data.status === 'completed' || response.data.status === 'failed') {
+      if (response.data.status === 'completed' || response.data.status === 'failed' || response.data.status === 'error' || response.data.status === 'timeout') {
         if (pollingInterval) {
           clearInterval(pollingInterval);
           setPollingInterval(null);
@@ -142,15 +164,18 @@ export default function ResultPage() {
         clearInterval(pollingInterval);
       }
     };
-  }, [id, workspaceId]); // 添加 workspaceId 依赖
+  }, [id, workspaceId]);
 
   // 渲染状态标签
   const renderStatusBadge = (status: SearchStatus) => {
     const statusMap = {
       pending: { text: '等待中', color: 'bg-gray-500' },
       processing: { text: '处理中', color: 'bg-blue-500 animate-pulse' },
+      running: { text: '运行中', color: 'bg-blue-500 animate-pulse' },
       completed: { text: '已完成', color: 'bg-green-500' },
-      failed: { text: '失败', color: 'bg-red-500' }
+      failed: { text: '失败', color: 'bg-red-500' },
+      error: { text: '错误', color: 'bg-red-500' },
+      timeout: { text: '超时', color: 'bg-yellow-500' }
     };
 
     const { text, color } = statusMap[status] || statusMap.pending;
@@ -166,8 +191,9 @@ export default function ResultPage() {
               fontWeight: '500',
               color: 'white',
               backgroundColor: status === 'pending' ? '#6b7280' :
-                               status === 'processing' ? '#3b82f6' :
-                               status === 'completed' ? '#10b981' : '#ef4444'
+                               status === 'processing' || status === 'running' ? '#3b82f6' :
+                               status === 'completed' ? '#10b981' : 
+                               status === 'timeout' ? '#eab308' : '#ef4444'
             }}>
         {text}
       </span>
@@ -594,10 +620,61 @@ export default function ResultPage() {
             </div>
           </div>
 
-          {/* 如果搜索已完成且有结果 */}          {searchData.status === 'completed' && (searchData.answer || searchData.results?.answer || searchData.result) && (            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6"                 style={{                   backgroundColor: '#f0fdf4',                   border: '1px solid #bbf7d0',                   borderRadius: '8px',                   padding: '16px',                   marginBottom: '24px'                 }}>              <h3 className="text-lg font-medium text-green-800 mb-2"                  style={{                    fontSize: '1.125rem',                    fontWeight: '500',                    color: '#166534',                    marginBottom: '8px'                  }}>最终结果</h3>              <div className="prose max-w-none"                   style={{                     maxWidth: 'none',                     color: '#166534'                   }}>                <ReactMarkdown>{searchData.answer || searchData.results?.answer || searchData.result || '暂无结果'}</ReactMarkdown>              </div>            </div>          )}
+          {/* 如果搜索已完成且有结果 */}
+          {searchData.status === 'completed' && (searchData.answer || searchData.results?.answer || searchData.result) && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6"
+                 style={{
+                   backgroundColor: '#f0fdf4',
+                   border: '1px solid #bbf7d0',
+                   borderRadius: '8px',
+                   padding: '16px',
+                   marginBottom: '24px'
+                 }}>
+              <h3 className="text-lg font-medium text-green-800 mb-2"
+                  style={{
+                    fontSize: '1.125rem',
+                    fontWeight: '500',
+                    color: '#166534',
+                    marginBottom: '8px'
+                  }}>最终结果</h3>
+              <div className="prose max-w-none"
+                   style={{
+                     maxWidth: 'none',
+                     color: '#166534'
+                   }}>
+                <ReactMarkdown>{searchData.answer || searchData.results?.answer || searchData.result || '暂无结果'}</ReactMarkdown>
+              </div>
+            </div>
+          )}
+
+          {/* 如果搜索超时 */}
+          {searchData.status === 'timeout' && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6"
+                 style={{
+                   backgroundColor: '#fefce8',
+                   border: '1px solid #fde047',
+                   borderRadius: '8px',
+                   padding: '16px',
+                   marginBottom: '24px'
+                 }}>
+              <h3 className="text-lg font-medium text-yellow-800"
+                  style={{
+                    fontSize: '1.125rem',
+                    fontWeight: '500',
+                    color: '#92400e'
+                  }}>搜索超时</h3>
+              <p className="text-yellow-700" 
+                 style={{ color: '#a16207' }}>{searchData.message || '搜索执行超时'}</p>
+              {searchData.summary && (
+                <div className="mt-2" style={{ marginTop: '8px' }}>
+                  <p className="text-yellow-700" style={{ color: '#a16207' }}>{searchData.summary}</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 如果搜索失败 */}
-          {searchData.status === 'failed' && (
+          {(searchData.status === 'failed' || searchData.status === 'error') && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6"
                  style={{
                    backgroundColor: '#fef2f2',
@@ -627,7 +704,7 @@ export default function ResultPage() {
                   marginBottom: '16px'
                 }}>思考过程</h3>
 
-            {searchData.status === 'processing' && (
+            {(searchData.status === 'processing' || searchData.status === 'running') && (
               <div className="mb-4 flex items-center"
                    style={{
                      marginBottom: '16px',
@@ -649,7 +726,8 @@ export default function ResultPage() {
               </div>
             )}
 
-            {/* 迭代列表 */}            {!searchData.iterations || searchData.iterations.length === 0 ? (
+            {/* 迭代列表 */}
+            {!searchData.iterations || searchData.iterations.length === 0 ? (
               <div className="text-gray-500" 
                    style={{ color: '#6b7280' }}>尚无迭代数据</div>
             ) : (
@@ -713,7 +791,10 @@ export default function ResultPage() {
                           {renderMemoryBlocks(iteration.workspace_state)}
                         </div>
 
-                                                {/* 工具调用 */}                        {iteration.tool_calls && iteration.tool_calls.length > 0 && (                          renderToolCalls(iteration.tool_calls)                        )}
+                        {/* 工具调用 */}
+                        {iteration.tool_calls && iteration.tool_calls.length > 0 && (
+                          renderToolCalls(iteration.tool_calls)
+                        )}
                       </div>
                     )}
                   </div>
