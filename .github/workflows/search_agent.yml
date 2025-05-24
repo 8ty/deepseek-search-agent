@@ -50,7 +50,7 @@ jobs:
         # 从 repository_dispatch 获取参数
         SEARCH_QUERY: ${{ github.event.client_payload.query || inputs.query }}
         CALLBACK_URL: ${{ github.event.client_payload.callback_url || inputs.callback_url }}
-        WORKSPACE_ID: ${{ github.event.client_payload.workspace_id || inputs.workspace_id }}
+        WORKSPACE_ID: ${{ github.event.client_payload.search_id || github.event.client_payload.workspace_id || inputs.workspace_id }}
         MAX_ROUNDS: ${{ github.event.client_payload.max_rounds || inputs.max_rounds }}
         INCLUDE_SCRAPING: ${{ github.event.client_payload.include_scraping || 'true' }}
         # GitHub 信息
