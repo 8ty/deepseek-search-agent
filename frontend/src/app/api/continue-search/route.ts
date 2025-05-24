@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import memoryStorage from '../../../lib/storage';
-import { get, put } from '@vercel/blob';
+import { head, put } from '@vercel/blob';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,11 +18,15 @@ export async function POST(request: NextRequest) {
     // 从Vercel Blob读取之前的搜索状态
     let previousSearchState = null;
     try {
-      const blobResponse = await get(`searches/${search_id}.json`);
-      if (blobResponse) {
-        const blobText = await blobResponse.text();
-        previousSearchState = JSON.parse(blobText);
-        console.log(`从Blob读取到搜索状态: ${search_id}`);
+      const blobHead = await head(`searches/${search_id}.json`);
+      if (blobHead) {
+        // 通过URL获取blob内容
+        const blobResponse = await fetch(blobHead.url);
+        if (blobResponse.ok) {
+          const blobText = await blobResponse.text();
+          previousSearchState = JSON.parse(blobText);
+          console.log(`从Blob读取到搜索状态: ${search_id}`);
+        }
       }
     } catch (blobError) {
       console.warn('从Blob读取搜索状态失败，尝试从内存读取:', blobError);
