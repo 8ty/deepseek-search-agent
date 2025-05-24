@@ -11,3 +11,7 @@ frontend/.next
 api/__pycache__/
 agent/__pycache__/
 config/__pycache__
+MAINTENANCE.md
+QUICK_REFERENCE.md
+.cursorrules
+.gitignore
