@@ -6,7 +6,7 @@ import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 
 // 定义搜索状态类型
-type SearchStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'running' | 'timeout' | 'error';
+type SearchStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'running' | 'timeout' | 'error' | 'waiting_user_decision';
 
 // 定义迭代数据类型
 interface Iteration {
@@ -78,76 +78,269 @@ const TimeoutHandler: React.FC<TimeoutHandlerProps> = ({
 }) => {
   const [isRequesting, setIsRequesting] = useState(false);
   const [actionType, setActionType] = useState<'continue' | 'finalize' | null>(null);
+  const [isWaitingDecision, setIsWaitingDecision] = useState(false);
 
-  const handleContinueSearch = async () => {
-    setIsRequesting(true);
-    setActionType('continue');
+  useEffect(() => {
+    // 检查是否处于等待用户决策状态
+    if (searchData.status === 'waiting_user_decision') {
+      setIsWaitingDecision(true);
+    } else {
+      setIsWaitingDecision(false);
+    }
+  }, [searchData.status]);
 
+  const sendUserDecision = async (action: 'continue' | 'finalize') => {
     try {
-      // 发送继续搜索请求
-      const response = await fetch('/api/continue-search', {
+      setIsRequesting(true);
+      setActionType(action);
+
+      const response = await fetch(`/api/user-decision/${searchId}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+        headers: { 
+          'Content-Type': 'application/json' 
         },
-        body: JSON.stringify({
-          search_id: searchId,
-          workspace_id: workspaceId,
-          max_rounds: 3, // 额外的迭代次数
-          current_state: searchData.final_state
-        }),
+        body: JSON.stringify({ action })
       });
 
       if (response.ok) {
-        // 重新加载页面以查看新的搜索状态
+        const result = await response.json();
+        console.log('✅ 用户决策已发送:', result);
+        
+        setIsWaitingDecision(false);
+        // 立即开始轮询状态更新
         onContinueSearch();
       } else {
-        alert('继续搜索失败，请稍后重试');
+        const error = await response.json();
+        console.error('❌ 发送用户决策失败:', error);
+        alert(`发送决策失败: ${error.error || '未知错误'}`);
       }
     } catch (error) {
-      console.error('继续搜索请求失败:', error);
-      alert('继续搜索请求失败');
+      console.error('❌ 用户决策请求失败:', error);
+      alert('发送决策请求失败，请稍后重试');
     } finally {
       setIsRequesting(false);
       setActionType(null);
+    }
+  };
+
+  const handleContinueSearch = async () => {
+    if (isWaitingDecision) {
+      // 如果是等待决策状态，发送用户决策
+      await sendUserDecision('continue');
+    } else {
+      // 原有的继续搜索逻辑（用于向后兼容）
+      setIsRequesting(true);
+      setActionType('continue');
+
+      try {
+        // 发送继续搜索请求
+        const response = await fetch('/api/continue-search', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            search_id: searchId,
+            workspace_id: workspaceId,
+            max_rounds: 3, // 额外的迭代次数
+            current_state: searchData.final_state
+          }),
+        });
+
+        if (response.ok) {
+          // 重新加载页面以查看新的搜索状态
+          onContinueSearch();
+        } else {
+          alert('继续搜索失败，请稍后重试');
+        }
+      } catch (error) {
+        console.error('继续搜索请求失败:', error);
+        alert('继续搜索请求失败');
+      } finally {
+        setIsRequesting(false);
+        setActionType(null);
+      }
     }
   };
 
   const handleFinalizeResult = async () => {
-    setIsRequesting(true);
-    setActionType('finalize');
+    if (isWaitingDecision) {
+      // 如果是等待决策状态，发送用户决策
+      await sendUserDecision('finalize');
+    } else {
+      // 原有的最终化结果逻辑（用于向后兼容）
+      setIsRequesting(true);
+      setActionType('finalize');
 
-    try {
-      // 发送根据当前信息生成最终结果的请求
-      const response = await fetch('/api/finalize-search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          search_id: searchId,
-          workspace_id: workspaceId,
-          query: searchData.query,
-          iterations: searchData.iterations,
-          final_state: searchData.final_state
-        }),
-      });
+      try {
+        // 发送根据当前信息生成最终结果的请求
+        const response = await fetch('/api/finalize-search', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            search_id: searchId,
+            workspace_id: workspaceId,
+            query: searchData.query,
+            iterations: searchData.iterations,
+            final_state: searchData.final_state
+          }),
+        });
 
-      if (response.ok) {
-        // 重新加载页面以查看最终结果
-        onContinueSearch();
-      } else {
-        alert('生成最终结果失败，请稍后重试');
+        if (response.ok) {
+          // 重新加载页面以查看最终结果
+          onContinueSearch();
+        } else {
+          alert('生成最终结果失败，请稍后重试');
+        }
+      } catch (error) {
+        console.error('生成最终结果请求失败:', error);
+        alert('生成最终结果请求失败');
+      } finally {
+        setIsRequesting(false);
+        setActionType(null);
       }
-    } catch (error) {
-      console.error('生成最终结果请求失败:', error);
-      alert('生成最终结果请求失败');
-    } finally {
-      setIsRequesting(false);
-      setActionType(null);
     }
   };
 
+  // 如果是等待用户决策状态，显示不同的界面
+  if (isWaitingDecision) {
+    return (
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6"
+           style={{
+             backgroundColor: '#eff6ff',
+             border: '1px solid #3b82f6',
+             borderRadius: '12px',
+             padding: '24px',
+             marginBottom: '24px'
+           }}>
+        <div className="flex items-start space-x-4">
+          <div className="flex-shrink-0">
+            <svg className="h-6 w-6 text-blue-600"
+                 style={{ width: '24px', height: '24px', color: '#2563eb' }}
+                 fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-medium text-blue-800 mb-2"
+                style={{
+                  fontSize: '1.125rem',
+                  fontWeight: '500',
+                  color: '#1e40af',
+                  marginBottom: '8px'
+                }}>
+              🤔 搜索代理正在等待您的指示
+            </h3>
+            <p className="text-blue-700 mb-4"
+               style={{ color: '#1d4ed8', marginBottom: '16px' }}>
+              搜索已完成初始轮次，代理正在等待您的决策。请选择下一步操作：
+            </p>
+
+            <div className="bg-blue-100 rounded-lg p-3 mb-4"
+                 style={{
+                   backgroundColor: '#dbeafe',
+                   borderRadius: '8px',
+                   padding: '12px',
+                   marginBottom: '16px'
+                 }}>
+              <p className="text-blue-800 text-sm"
+                 style={{ color: '#1e40af', fontSize: '0.875rem' }}>
+                <strong>💡 提示：</strong> 搜索代理在同一个环境中等待您的指示，这样可以保持所有搜索状态和上下文。
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3"
+                 style={{
+                   display: 'flex',
+                   flexDirection: 'column',
+                   gap: '12px'
+                 }}>
+
+              {/* 继续搜索按钮 */}
+              <button
+                onClick={handleContinueSearch}
+                disabled={isRequesting}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
+                style={{
+                  flex: 1,
+                  backgroundColor: isRequesting && actionType === 'continue' ? '#9ca3af' : '#2563eb',
+                  color: 'white',
+                  fontWeight: '500',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: (isRequesting && actionType === 'continue') ? 'not-allowed' : 'pointer',
+                  transition: 'background-color 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {isRequesting && actionType === 'continue' ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                         style={{ animation: 'spin 1s linear infinite', marginLeft: '-4px', marginRight: '8px', width: '16px', height: '16px' }}
+                         xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    发送指令中...
+                  </>
+                ) : (
+                  '🔄 继续深入搜索'
+                )}
+              </button>
+
+              {/* 生成最终结果按钮 */}
+              <button
+                onClick={handleFinalizeResult}
+                disabled={isRequesting}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
+                style={{
+                  flex: 1,
+                  backgroundColor: isRequesting && actionType === 'finalize' ? '#9ca3af' : '#16a34a',
+                  color: 'white',
+                  fontWeight: '500',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: (isRequesting && actionType === 'finalize') ? 'not-allowed' : 'pointer',
+                  transition: 'background-color 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {isRequesting && actionType === 'finalize' ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                         style={{ animation: 'spin 1s linear infinite', marginLeft: '-4px', marginRight: '8px', width: '16px', height: '16px' }}
+                         xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    发送指令中...
+                  </>
+                ) : (
+                  '📝 基于现有信息生成结果'
+                )}
+              </button>
+            </div>
+
+            <div className="mt-4 text-sm text-blue-600"
+                 style={{ marginTop: '16px', fontSize: '0.875rem', color: '#2563eb' }}>
+              ⏰ 代理将在5分钟后自动选择生成最终结果
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 原有的timeout状态界面
   return (
     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-6"
          style={{

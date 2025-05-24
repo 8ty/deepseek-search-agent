@@ -10,6 +10,7 @@ import asyncio
 import aiohttp
 import traceback
 import re
+import argparse
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
@@ -483,36 +484,374 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
 
     async def send_update(self, update_type: str, data: Dict[str, Any]):
         """发送更新到回调URL"""
-        if not self.callback_url:
-            if self.debug_mode and not self.silent_mode:
-                print(f"📤 Update [{update_type}]: {json.dumps(data, ensure_ascii=False, indent=2)}")
-            return
-            
-        # 构建带有search_id的回调URL
-        separator = '&' if '?' in self.callback_url else '?'
-        callback_url_with_id = f"{self.callback_url}{separator}id={self.search_id}"
-        
-        payload = {
-            "type": update_type,
-            "data": data,
-            "timestamp": datetime.now().isoformat()
-        }
+        if not self.silent_mode:
+            print(f"📤 发送更新: {update_type}")
         
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(callback_url_with_id, json=payload) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        if self.debug_mode and not self.silent_mode:
-                            print(f"❌ Failed to send update: {error_text}")
-                    else:
-                        if self.debug_mode and not self.silent_mode:
-                            print(f"✅ Update sent: {update_type}")
+            if self.callback_url:
+                parsed_url = aiohttp.client_reqrep.URL(self.callback_url)
+                # 添加搜索ID作为查询参数
+                callback_with_id = str(parsed_url.with_query(id=self.search_id))
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        callback_with_id,
+                        json={
+                            "type": update_type,
+                            "data": data,
+                            "timestamp": datetime.now().isoformat()
+                        },
+                        timeout=aiohttp.ClientTimeout(total=30)
+                    ) as response:
+                        if not self.silent_mode:
+                            print(f"✅ 更新发送成功: {response.status}")
+            else:
+                if not self.silent_mode:
+                    print("⚠️ 无回调URL，跳过更新发送")
+                    
         except Exception as e:
+            if not self.silent_mode:
+                print(f"❌ 发送更新失败: {str(e)}")
+
+    async def wait_for_user_decision(self, timeout_seconds: int = 300) -> str:
+        """等待用户决策：继续搜索 或 生成结果"""
+        if not self.callback_url:
             if self.debug_mode and not self.silent_mode:
-                print(f"❌ Error sending update: {str(e)}")
+                print("⚠️ 无回调URL，无法等待用户决策")
+            return 'timeout'
+            
+        # 构建用户决策API端点
+        base_url = self.callback_url.replace('/api/webhook', '')
+        decision_endpoint = f"{base_url}/api/user-decision/{self.search_id}"
+        
+        if self.debug_mode and not self.silent_mode:
+            print(f"⏳ 等待用户决策，监听端点: {decision_endpoint}")
+            print(f"⏰ 超时时间: {timeout_seconds}秒")
+        
+        # 轮询用户决策（每10秒检查一次）
+        for i in range(timeout_seconds // 10):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(decision_endpoint, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            action = data.get('action')
+                            if action:
+                                if self.debug_mode and not self.silent_mode:
+                                    print(f"✅ 收到用户决策: {action}")
+                                return action
+            except Exception as e:
+                if self.debug_mode and not self.silent_mode:
+                    print(f"🔄 轮询用户决策失败 (尝试 {i+1}): {str(e)}")
+                pass
+            
+            if self.debug_mode and not self.silent_mode:
+                remaining_time = timeout_seconds - (i + 1) * 10
+                print(f"⏳ 等待用户决策中... (剩余 {remaining_time}秒)")
+            
+            await asyncio.sleep(10)
+        
+        if self.debug_mode and not self.silent_mode:
+            print("⏰ 用户决策等待超时")
+        return 'timeout'
+
+    async def continue_search_in_same_env(self, additional_rounds: int = 3) -> Dict[str, Any]:
+        """在同一环境中继续搜索额外轮次"""
+        if self.debug_mode and not self.silent_mode:
+            print(f"🔄 继续搜索额外 {additional_rounds} 轮")
+        
+        # 记录继续搜索前的状态
+        pre_continue_round = self.round
+        pre_continue_iterations = len(self.iteration_results)
+        
+        # 发送继续搜索状态更新
+        await self.send_update("continue_start", {
+            "message": f"开始继续搜索额外 {additional_rounds} 轮",
+            "previous_rounds": pre_continue_round,
+            "additional_rounds": additional_rounds
+        })
+        
+        # 继续搜索逻辑（基于原有的run方法逻辑）
+        max_total_rounds = pre_continue_round + additional_rounds
+        consecutive_failures = 0
+        total_tool_calls = sum(len(it.get("tool_calls", [])) for it in self.iteration_results)
+        
+        while self.round < max_total_rounds:
+            try:
+                if self.debug_mode and not self.silent_mode:
+                    print(f"\n🔄 === 继续搜索 Round {self.round + 1} ===")
+                
+                # 使用增强的提示，说明这是继续搜索
+                enhanced_task = f"{self.task}\n\n[继续搜索模式] 已完成 {pre_continue_round} 轮搜索，现在继续深入探索。请基于已有信息寻找更多细节或不同角度的信息。"
+                
+                response = await self.prompt.run({
+                    "current_date": self.current_date,
+                    "task": enhanced_task,
+                    "workspace": self.workspace.to_string(),
+                    "tool_records": self.tool_records,
+                })
+                
+                if self.debug_mode and not self.silent_mode:
+                    print(f"✅ 继续搜索API调用成功，响应长度: {len(response)}")
+
+                # 清除思考部分并提取JSON
+                response = re.sub(r"(?:<think>)?.*?</think>", "", response, flags=re.DOTALL)
+                response_json = extract_largest_json(response)
+                
+                if not response_json:
+                    if self.debug_mode and not self.silent_mode:
+                        print("❌ 继续搜索: JSON提取失败")
+                    break
+                
+                # 更新工作区
+                self.workspace.update_blocks(
+                    response_json.get("status_update", "IN_PROGRESS"),
+                    response_json.get("memory_updates", []),
+                    response_json.get("answer", None),
+                )
+                
+                # 记录迭代结果
+                iteration_result = {
+                    "round": self.round + 1,
+                    "workspace_state": self.workspace.to_string(),
+                    "tool_calls": response_json.get("tool_calls", []),
+                    "response_json": response_json,
+                    "raw_response": response[:500] + "..." if len(response) > 500 else response,
+                    "is_continuation": True
+                }
+                
+                self.iteration_results.append(iteration_result)
+                await self.send_update("iteration", iteration_result)
+
+                # 检查是否完成
+                if self.workspace.is_done():
+                    if self.debug_mode and not self.silent_mode:
+                        print("🎉 继续搜索任务完成!")
+                    final_answer = response_json.get("answer", "")
+                    await self.send_update("complete", {
+                        "answer": final_answer,
+                        "iterations": self.iteration_results,
+                        "total_rounds": self.round + 1,
+                        "continued_search": True
+                    })
+                    break
+
+                # 执行工具调用
+                tool_calls = response_json.get("tool_calls", [])
+                if not tool_calls:
+                    consecutive_failures += 1
+                    if consecutive_failures >= 2:
+                        break
+                else:
+                    consecutive_failures = 0
+                
+                total_tool_calls += len(tool_calls)
+                
+                # 执行工具调用（复用原有逻辑）
+                tool_outputs = []
+                for call in tool_calls:
+                    try:
+                        output = await self.run_tool(call["tool"], call["input"])
+                        tool_outputs.append(output)
+                    except Exception as e:
+                        tool_outputs.append(f"Tool error: {str(e)}")
+                
+                self.tool_records = [
+                    {**call, "output": output}
+                    for call, output in zip(tool_calls, tool_outputs)
+                ]
+
+            except Exception as e:
+                if self.debug_mode and not self.silent_mode:
+                    print(f"❌ 继续搜索出错: {str(e)}")
+                await self.send_update("error", {"error": str(e), "traceback": traceback.format_exc()})
+                break
+            
+            self.round += 1
+            await asyncio.sleep(2)  # 避免API限制
+        
+        # 返回继续搜索的结果
+        return {
+            "search_id": self.search_id,
+            "iterations": self.iteration_results,
+            "final_state": self.workspace.to_string(),
+            "is_complete": self.workspace.is_done(),
+            "answer": self.workspace.state.get("answer"),
+            "total_rounds": self.round,
+            "total_tool_calls": total_tool_calls,
+            "continued_search": True,
+            "additional_rounds_completed": self.round - pre_continue_round
+        }
+
+    async def finalize_with_current_state(self) -> Dict[str, Any]:
+        """基于当前状态生成最终结果"""
+        if self.debug_mode and not self.silent_mode:
+            print("📝 开始基于当前状态生成最终结果...")
+        
+        # 发送最终化开始状态
+        await self.send_update("finalize_start", {
+            "message": "开始基于现有信息生成最终结果",
+            "rounds_completed": self.round,
+            "iterations_count": len(self.iteration_results)
+        })
+        
+        try:
+            # 构建总结提示
+            iterations_summary = ""
+            if self.iteration_results:
+                iterations_summary = "以下是搜索过程中收集的信息:\n"
+                for i, iteration in enumerate(self.iteration_results[:5], 1):  # 最多使用前5轮
+                    iterations_summary += f"\n=== 第{i}轮搜索 ===\n"
+                    workspace_state = iteration.get('workspace_state', '')
+                    if len(workspace_state) > 500:
+                        workspace_state = workspace_state[:500] + "..."
+                    iterations_summary += f"工作空间状态: {workspace_state}\n"
+                    
+                    tool_calls = iteration.get('tool_calls', [])
+                    if tool_calls:
+                        iterations_summary += f"工具调用: {len(tool_calls)} 次\n"
+                        for tool_call in tool_calls[:3]:  # 最多显示3个工具调用
+                            tool_name = tool_call.get('tool', '')
+                            tool_input = tool_call.get('input', '')[:100]
+                            iterations_summary += f"- {tool_name}: {tool_input}...\n"
+                            
+                            # 如果有工具记录，显示输出
+                            for record in self.tool_records:
+                                if (record.get('tool') == tool_name and 
+                                    record.get('input') == tool_call.get('input')):
+                                    output = record.get('output', '')[:200]
+                                    iterations_summary += f"  结果: {output}...\n"
+                                    break
+            
+            # 构建最终化提示
+            finalize_prompt = f"""你是一个专业的信息分析师。请基于以下搜索过程和收集的信息，为用户查询生成一个全面、准确的最终答案。
+
+用户查询: {self.task}
+
+{iterations_summary}
+
+当前工作空间状态:
+{self.workspace.to_string()}
+
+请你:
+1. 分析以上搜索迭代中收集到的所有相关信息
+2. 整合这些信息，确保答案的完整性和准确性
+3. 提供一个结构清晰、内容丰富的最终答案
+4. 如果信息不足，明确指出哪些方面需要更多信息
+
+请直接给出最终答案，不需要再进行搜索。答案应该：
+- 完整回答用户的问题
+- 基于已收集的信息
+- 结构清晰，易于理解
+- 包含具体的建议或结论（如果适用）
+
+最终答案:"""
+
+            if self.debug_mode and not self.silent_mode:
+                print("🤖 调用AI生成最终结果...")
+            
+            # 直接调用提示生成最终答案
+            response = await self.prompt.run({
+                "current_date": self.current_date,
+                "task": finalize_prompt,
+                "workspace": "",  # 不需要工作空间
+                "tool_records": [],  # 不需要工具记录
+            })
+            
+            # 清理响应（移除思考部分）
+            final_answer = re.sub(r"(?:<think>)?.*?</think>", "", response, flags=re.DOTALL).strip()
+            
+            if self.debug_mode and not self.silent_mode:
+                print(f"✅ 最终结果生成完成，长度: {len(final_answer)} 字符")
+            
+            # 更新工作空间状态为完成
+            self.workspace.update_blocks("DONE", [], final_answer)
+            
+            # 发送完成状态
+            result = {
+                "answer": final_answer,
+                "iterations": self.iteration_results,
+                "total_rounds": self.round,
+                "generation_method": "finalize_from_existing_data",
+                "completedAt": datetime.now().isoformat()
+            }
+            
+            await self.send_update("complete", result)
+            
+            return {
+                "search_id": self.search_id,
+                "iterations": self.iteration_results,
+                "final_state": self.workspace.to_string(),
+                "is_complete": True,
+                "answer": final_answer,
+                "total_rounds": self.round,
+                "generation_method": "finalize_from_existing_data"
+            }
+            
+        except Exception as e:
+            error_msg = f"生成最终结果失败: {str(e)}"
+            if self.debug_mode and not self.silent_mode:
+                print(f"❌ {error_msg}")
+                print(traceback.format_exc())
+            
+            await self.send_update("error", {
+                "error": error_msg,
+                "traceback": traceback.format_exc()
+            })
+            
+            return {
+                "error": error_msg,
+                "success": False
+            }
+
+    async def enhanced_search_flow(self, max_rounds: int = 5) -> Dict[str, Any]:
+        """增强搜索流程：支持用户交互"""
+        if self.debug_mode and not self.silent_mode:
+            print("🔄 启动增强搜索流程...")
+        
+        # 正常执行搜索
+        result = await self.run(max_rounds=max_rounds)
+        
+        # 检查是否需要用户交互
+        if not result.get('is_complete') and result.get('total_rounds', 0) >= max_rounds:
+            if self.debug_mode and not self.silent_mode:
+                print("⏰ 搜索达到最大轮次，等待用户决策...")
+            
+            # 发送等待用户决策状态
+            await self.send_update("waiting_user_decision", {
+                "message": "搜索达到最大轮次，等待用户决策",
+                "iterations": result.get('iterations', []),
+                "final_state": result.get('final_state', ''),
+                "options": ["continue", "finalize"]
+            })
+            
+            # 等待用户选择
+            user_action = await self.wait_for_user_decision()
+            
+            if user_action == 'continue':
+                if self.debug_mode and not self.silent_mode:
+                    print("👤 用户选择：继续搜索")
+                # 继续搜索额外轮次
+                continue_result = await self.continue_search_in_same_env(3)
+                return continue_result
+            elif user_action == 'finalize':
+                if self.debug_mode and not self.silent_mode:
+                    print("👤 用户选择：生成最终结果")
+                # 基于现有信息生成最终结果
+                final_result = await self.finalize_with_current_state()
+                return final_result
+            else:
+                if self.debug_mode and not self.silent_mode:
+                    print("⏰ 用户决策超时，自动生成最终结果")
+                # 超时时自动生成最终结果
+                timeout_result = await self.finalize_with_current_state()
+                timeout_result['timeout_finalized'] = True
+                return timeout_result
+        
+        return result
 
     async def run_tool(self, tool_id: str, tool_input: str, context: str | None = None) -> str:
+        """执行工具调用"""
         try:
             assert tool_id in ["search", "scrape"], f"Illegal tool: {tool_id}"
             tool = self.tools[tool_id]
@@ -935,6 +1274,14 @@ class GitHubRunner:
 # CLI 入口函数
 async def main():
     """主函数 - CLI 入口"""
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='DeepSeek 搜索代理')
+    parser.add_argument('--interactive', action='store_true', 
+                       help='启用用户交互模式（等待用户决策）')
+    parser.add_argument('--mode', choices=['normal', 'interactive'], default='normal',
+                       help='运行模式：normal（正常模式）或 interactive（交互模式）')
+    args = parser.parse_args()
+    
     runner = GitHubRunner()
     
     # 检查和验证环境
@@ -949,6 +1296,11 @@ async def main():
     environment = os.getenv("ENVIRONMENT", "production")
     debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
     silent_mode = os.getenv("SILENT_MODE", "false").lower() == "true"
+    
+    # 检查是否启用用户交互
+    enable_user_interaction = (args.interactive or 
+                             args.mode == 'interactive' or 
+                             os.getenv("ENABLE_USER_INTERACTION", "false").lower() == "true")
 
     if debug_mode and not silent_mode:
         print(f"📋 搜索查询: {query}")
@@ -959,6 +1311,7 @@ async def main():
         print(f"🌍 环境: {environment}")
         print(f"🐛 调试模式: {debug_mode}")
         print(f"🔇 静默模式: {silent_mode}")
+        print(f"🤝 用户交互模式: {enable_user_interaction}")
         
         runner.check_environment()
     elif not silent_mode:
@@ -981,8 +1334,25 @@ async def main():
         sys.exit(1)
     
     try:
-        # 执行搜索
-        result = await runner.run_iterative_search(query, callback_url, max_rounds, workspace_id, debug_mode, silent_mode)
+        if enable_user_interaction:
+            # 启用用户交互模式
+            if debug_mode and not silent_mode:
+                print("🤝 启用用户交互模式")
+            
+            # 创建增强搜索代理
+            agent = GitHubSearchAgent(
+                task=query,
+                callback_url=callback_url,
+                search_id=workspace_id,
+                debug_mode=debug_mode,
+                silent_mode=silent_mode
+            )
+            
+            # 运行增强搜索流程
+            result = await agent.enhanced_search_flow(max_rounds=max_rounds)
+        else:
+            # 正常模式
+            result = await runner.run_iterative_search(query, callback_url, max_rounds, workspace_id, debug_mode, silent_mode)
         
         # 输出结果
         if not silent_mode:

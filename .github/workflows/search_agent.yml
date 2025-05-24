@@ -32,6 +32,11 @@ on:
         required: false
         type: boolean
         default: true
+      enable_user_interaction:
+        description: '启用用户交互模式'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   test-suite:
@@ -68,6 +73,7 @@ jobs:
         INCLUDE_SCRAPING: ${{ github.event.client_payload.include_scraping || 'true' }}
         DEBUG_MODE: ${{ github.event.client_payload.debug_mode || inputs.debug_mode || 'false' }}
         SILENT_MODE: ${{ github.event.client_payload.quiet_mode || inputs.quiet_mode || 'true' }}
+        ENABLE_USER_INTERACTION: ${{ github.event.client_payload.enable_user_interaction || inputs.enable_user_interaction || 'false' }}
         # 系统环境信息
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_REF: ${{ github.ref }}
@@ -81,46 +87,67 @@ jobs:
         echo "  - 范围: $SEARCH_QUERY"
         echo "  - 环境: $WORKSPACE_ID"
         echo "  - 轮数: $MAX_ROUNDS"
+        echo "  - 用户交互: $ENABLE_USER_INTERACTION"
         
-        # 根据模式决定输出级别
-        if [ "$QUIET_MODE" = "true" ] && [ "$DEBUG_MODE" = "false" ]; then
-          echo "🔇 简洁模式已启用"
-          echo "⚡ 正在运行测试..."
+        # 根据用户交互模式决定执行方式
+        if [ "$ENABLE_USER_INTERACTION" = "true" ]; then
+          echo "🤝 启用用户交互模式"
+          echo "⚡ 运行增强搜索流程..."
           
-          # 简洁执行，隐藏详细输出
-          python -m api.github_runner >/dev/null 2>&1 || {
-            echo "❌ 测试执行失败"
-            exit 1
-          }
-          echo "✅ 测试完成"
-          
-        elif [ "$DEBUG_MODE" = "true" ]; then
-          echo "🔍 详细日志模式已启用"
-          echo "📋 测试范围: $SEARCH_QUERY"
-          echo "📞 回调配置: $CALLBACK_URL"
-          echo "🏠 环境标识: $WORKSPACE_ID"
-          echo "🔄 最大轮数: $MAX_ROUNDS"
-          echo "🔧 包含扩展: $INCLUDE_SCRAPING"
-          echo "🌍 运行环境: $ENVIRONMENT"
-          echo "🔍 调试模式: $DEBUG_MODE"
-          echo "🔇 简洁模式: $SILENT_MODE"
-          
-          # 详细模式显示所有输出
-          python -m api.github_runner
+          # 用户交互模式：支持等待用户决策
+          if [ "$DEBUG_MODE" = "true" ]; then
+            echo "🔍 用户交互+详细日志模式"
+            python -m api.github_runner --interactive --mode interactive
+          else
+            echo "🔇 用户交互+简洁模式"
+            python -m api.github_runner --interactive >/dev/null 2>&1 || {
+              echo "❌ 增强搜索执行失败"
+              exit 1
+            }
+            echo "✅ 增强搜索完成"
+          fi
           
         else
-          echo "🔍 正在执行测试流程..."
-          echo "⚡ 测试进行中，请稍候..."
-          
-          # 标准模式，隐藏详细输出但保留错误信息
-          echo "::group::📊 测试详细日志"
-          python -m api.github_runner || {
+          # 原有的正常模式逻辑
+          if [ "$QUIET_MODE" = "true" ] && [ "$DEBUG_MODE" = "false" ]; then
+            echo "🔇 简洁模式已启用"
+            echo "⚡ 正在运行测试..."
+            
+            # 简洁执行，隐藏详细输出
+            python -m api.github_runner >/dev/null 2>&1 || {
+              echo "❌ 测试执行失败"
+              exit 1
+            }
+            echo "✅ 测试完成"
+            
+          elif [ "$DEBUG_MODE" = "true" ]; then
+            echo "🔍 详细日志模式已启用"
+            echo "📋 测试范围: $SEARCH_QUERY"
+            echo "📞 回调配置: $CALLBACK_URL"
+            echo "🏠 环境标识: $WORKSPACE_ID"
+            echo "🔄 最大轮数: $MAX_ROUNDS"
+            echo "🔧 包含扩展: $INCLUDE_SCRAPING"
+            echo "🌍 运行环境: $ENVIRONMENT"
+            echo "🔍 调试模式: $DEBUG_MODE"
+            echo "🔇 简洁模式: $SILENT_MODE"
+            
+            # 详细模式显示所有输出
+            python -m api.github_runner
+            
+          else
+            echo "🔍 正在执行测试流程..."
+            echo "⚡ 测试进行中，请稍候..."
+            
+            # 标准模式，隐藏详细输出但保留错误信息
+            echo "::group::📊 测试详细日志"
+            python -m api.github_runner || {
+              echo "::endgroup::"
+              echo "❌ 测试执行失败，请检查日志"
+              exit 1
+            }
             echo "::endgroup::"
-            echo "❌ 测试执行失败，请检查日志"
-            exit 1
-          }
-          echo "::endgroup::"
-          echo "✅ 测试流程完成"
+            echo "✅ 测试流程完成"
+          fi
         fi
         
     - name: 📊 输出测试结果

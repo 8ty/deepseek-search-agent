@@ -92,7 +92,8 @@ export async function POST(request: NextRequest) {
       test_rounds: body.max_rounds || 5,         // GitHub Actions 期望 test_rounds，实际是最大轮数
       include_scraping: body.include_scraping !== false,
       debug_mode: body.debug_mode || false,
-      quiet_mode: body.silent_mode !== false    // GitHub Actions 期望 quiet_mode，实际是静默模式
+      quiet_mode: body.silent_mode !== false,   // GitHub Actions 期望 quiet_mode，实际是静默模式
+      enable_user_interaction: body.enable_user_interaction || false  // 新增：用户交互模式选项
     };
 
     // 触发 GitHub Actions（如果配置了Token和Repository）
