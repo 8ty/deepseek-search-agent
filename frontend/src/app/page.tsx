@@ -17,6 +17,8 @@ export default function Home() {
   const [githubRepository, setGithubRepository] = useState('');
   const [debugMode, setDebugMode] = useState(false);
   const [silentMode, setSilentMode] = useState(true); // 默认启用静默模式
+  const [maxRounds, setMaxRounds] = useState(5); // 新增：最大迭代次数设定
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false); // 新增：高级选项显示状态
 
   // 从 localStorage 加载设置
   useEffect(() => {
@@ -67,7 +69,7 @@ export default function Home() {
     try {
       const searchData: any = {
         query: query.trim(),
-        max_rounds: 5,
+        max_rounds: maxRounds,
         include_scraping: true,
         debug_mode: debugMode, // 传递debug模式状态
         silent_mode: silentMode // 传递静默模式状态
@@ -425,6 +427,68 @@ export default function Home() {
                   />
                 </div>
               </label>
+            </div>
+
+            {/* 最大迭代次数设定 */}
+            <div className="p-3 bg-gray-50 rounded-lg border"
+                 style={{
+                   padding: '12px',
+                   backgroundColor: '#f9fafb',
+                   borderRadius: '8px',
+                   border: '1px solid #e5e7eb'
+                 }}>
+              <div>
+                <label className="text-sm font-medium text-gray-700"
+                       style={{
+                         fontSize: '0.875rem',
+                         fontWeight: '500',
+                         color: '#374151'
+                       }}>
+                  🔄 最大搜索轮次
+                </label>
+                <p className="text-xs text-gray-500 mt-1 mb-3"
+                   style={{
+                     fontSize: '0.75rem',
+                     color: '#6b7280',
+                     marginTop: '4px',
+                     marginBottom: '12px'
+                   }}>
+                  设置搜索引擎的最大探索轮次。更多轮次可能获得更全面的结果，但会增加等待时间。
+                </p>
+                <div className="flex items-center gap-4" 
+                     style={{ 
+                       display: 'flex', 
+                       alignItems: 'center', 
+                       gap: '16px' 
+                     }}>
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    value={maxRounds}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMaxRounds(parseInt(e.target.value))}
+                    className="flex-1"
+                    style={{ 
+                      flex: 1,
+                      accentColor: '#2563eb'
+                    }}
+                  />
+                  <span className="text-sm font-medium text-gray-900 min-w-[50px] text-center px-2 py-1 bg-white rounded border"
+                        style={{ 
+                          fontSize: '0.875rem', 
+                          fontWeight: '500', 
+                          color: '#111827', 
+                          minWidth: '50px',
+                          textAlign: 'center',
+                          padding: '4px 8px',
+                          backgroundColor: 'white',
+                          borderRadius: '4px',
+                          border: '1px solid #d1d5db'
+                        }}>
+                    {maxRounds} 轮
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 

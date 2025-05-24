@@ -1,0 +1,121 @@
+name: 🔄 增强搜索处理
+
+on:
+  repository_dispatch:
+    types: 
+      - continue_search    # 继续搜索
+      - finalize_search    # 生成最终结果
+
+jobs:
+  enhanced-search:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    
+    steps:
+    - name: 🔧 准备环境
+      uses: actions/checkout@v4
+      
+    - name: 🐍 配置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+        
+    - name: 📦 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: 🔄 处理继续搜索
+      if: github.event.action == 'continue_search'
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
+        ENVIRONMENT: "production"
+        SEARCH_QUERY: ${{ github.event.client_payload.query }}
+        CALLBACK_URL: ${{ github.event.client_payload.callback_url }}
+        WORKSPACE_ID: ${{ github.event.client_payload.workspace_id }}
+        SEARCH_ID: ${{ github.event.client_payload.search_id }}
+        MAX_ROUNDS: ${{ github.event.client_payload.max_rounds }}
+        CONTINUE_FROM_STATE: ${{ github.event.client_payload.continue_from_state }}
+        IS_CONTINUATION: 'true'
+        INCLUDE_SCRAPING: ${{ github.event.client_payload.include_scraping }}
+        DEBUG_MODE: ${{ github.event.client_payload.debug_mode }}
+        SILENT_MODE: ${{ github.event.client_payload.silent_mode }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_REF: ${{ github.ref }}
+        GITHUB_SHA: ${{ github.sha }}
+        GITHUB_ACTIONS: "true"
+        RUNNER_OS: ${{ runner.os }}
+      run: |
+        echo "🔄 继续搜索模式"
+        echo "📋 原始查询: $SEARCH_QUERY"
+        echo "📞 回调端点: $CALLBACK_URL"
+        echo "🆔 搜索ID: $SEARCH_ID"
+        echo "🏠 工作空间: $WORKSPACE_ID"
+        echo "🔄 额外轮次: $MAX_ROUNDS"
+        echo "📊 从状态继续: $(echo "$CONTINUE_FROM_STATE" | head -c 100)..."
+        echo ""
+        echo "🚀 开始继续搜索..."
+        echo ""
+        
+        python -m api.enhanced_runner --mode continue
+        
+    - name: 📝 处理生成最终结果
+      if: github.event.action == 'finalize_search'
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
+        ENVIRONMENT: "production"
+        SEARCH_QUERY: ${{ github.event.client_payload.query }}
+        CALLBACK_URL: ${{ github.event.client_payload.callback_url }}
+        WORKSPACE_ID: ${{ github.event.client_payload.workspace_id }}
+        SEARCH_ID: ${{ github.event.client_payload.search_id }}
+        ITERATIONS_DATA: ${{ github.event.client_payload.iterations }}
+        FINAL_STATE: ${{ github.event.client_payload.final_state }}
+        ACTION_TYPE: 'finalize'
+        DEBUG_MODE: ${{ github.event.client_payload.debug_mode }}
+        SILENT_MODE: ${{ github.event.client_payload.silent_mode }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_REF: ${{ github.ref }}
+        GITHUB_SHA: ${{ github.sha }}
+        GITHUB_ACTIONS: "true"
+        RUNNER_OS: ${{ runner.os }}
+      run: |
+        echo "📝 生成最终结果模式"
+        echo "📋 原始查询: $SEARCH_QUERY"
+        echo "📞 回调端点: $CALLBACK_URL"
+        echo "🆔 搜索ID: $SEARCH_ID"
+        echo "🏠 工作空间: $WORKSPACE_ID"
+        echo "📊 迭代数据长度: $(echo "$ITERATIONS_DATA" | wc -c)字符"
+        echo "📊 最终状态长度: $(echo "$FINAL_STATE" | wc -c)字符"
+        echo ""
+        echo "🚀 开始生成最终结果..."
+        echo ""
+        
+        python -m api.enhanced_runner --mode finalize
+        
+    - name: 📊 处理结果报告
+      if: always()
+      run: |
+        echo "✅ 增强搜索处理完成"
+        echo "⏰ 执行时间: $(date)"
+        echo "🔧 运行环境: ${{ runner.os }}"
+        echo "🐍 Python 版本: $(python --version)"
+        echo "📋 处理类型: ${{ github.event.action }}"
+        
+        if [ "${{ github.event.action }}" = "continue_search" ]; then
+          echo ""
+          echo "🔄 继续搜索处理摘要："
+          echo "- 搜索ID: ${{ github.event.client_payload.search_id }}"
+          echo "- 额外轮次: ${{ github.event.client_payload.max_rounds }}"
+          echo "- 是否包含网页抓取: ${{ github.event.client_payload.include_scraping }}"
+        elif [ "${{ github.event.action }}" = "finalize_search" ]; then
+          echo ""
+          echo "📝 最终结果生成摘要："
+          echo "- 搜索ID: ${{ github.event.client_payload.search_id }}"
+          echo "- 查询内容: ${{ github.event.client_payload.query }}"
+          echo "- 基于现有迭代数据生成结果"
+        fi 
