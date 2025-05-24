@@ -594,32 +594,7 @@ export default function ResultPage() {
             </div>
           </div>
 
-          {/* 如果搜索已完成且有结果 */}
-          {searchData.status === 'completed' && searchData.result && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6"
-                 style={{
-                   backgroundColor: '#f0fdf4',
-                   border: '1px solid #bbf7d0',
-                   borderRadius: '8px',
-                   padding: '16px',
-                   marginBottom: '24px'
-                 }}>
-              <h3 className="text-lg font-medium text-green-800 mb-2"
-                  style={{
-                    fontSize: '1.125rem',
-                    fontWeight: '500',
-                    color: '#166534',
-                    marginBottom: '8px'
-                  }}>最终结果</h3>
-              <div className="prose max-w-none"
-                   style={{
-                     maxWidth: 'none',
-                     color: '#166534'
-                   }}>
-                <ReactMarkdown>{searchData.result}</ReactMarkdown>
-              </div>
-            </div>
-          )}
+          {/* 如果搜索已完成且有结果 */}          {searchData.status === 'completed' && (searchData.answer || searchData.results?.answer || searchData.result) && (            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6"                 style={{                   backgroundColor: '#f0fdf4',                   border: '1px solid #bbf7d0',                   borderRadius: '8px',                   padding: '16px',                   marginBottom: '24px'                 }}>              <h3 className="text-lg font-medium text-green-800 mb-2"                  style={{                    fontSize: '1.125rem',                    fontWeight: '500',                    color: '#166534',                    marginBottom: '8px'                  }}>最终结果</h3>              <div className="prose max-w-none"                   style={{                     maxWidth: 'none',                     color: '#166534'                   }}>                <ReactMarkdown>{searchData.answer || searchData.results?.answer || searchData.result || '暂无结果'}</ReactMarkdown>              </div>            </div>          )}
 
           {/* 如果搜索失败 */}
           {searchData.status === 'failed' && (
@@ -669,13 +644,12 @@ export default function ResultPage() {
                        fontSize: '0.875rem',
                        color: '#6b7280'
                      }}>
-                  已完成 {searchData.iterations.length} 轮迭代
+                  已完成 {searchData.iterations?.length || 0} 轮迭代
                 </div>
               </div>
             )}
 
-            {/* 迭代列表 */}
-            {searchData.iterations.length === 0 ? (
+            {/* 迭代列表 */}            {!searchData.iterations || searchData.iterations.length === 0 ? (
               <div className="text-gray-500" 
                    style={{ color: '#6b7280' }}>尚无迭代数据</div>
             ) : (
@@ -685,7 +659,7 @@ export default function ResultPage() {
                      flexDirection: 'column', 
                      gap: '24px' 
                    }}>
-                {searchData.iterations.map((iteration: Iteration, index: number) => (
+                {(searchData.iterations || []).map((iteration: Iteration, index: number) => (
                   <div key={index} className="border rounded-lg overflow-hidden"
                        style={{
                          border: '1px solid #e5e7eb',
@@ -739,10 +713,7 @@ export default function ResultPage() {
                           {renderMemoryBlocks(iteration.workspace_state)}
                         </div>
 
-                        {/* 工具调用 */}
-                        {iteration.tool_calls.length > 0 && (
-                          renderToolCalls(iteration.tool_calls)
-                        )}
+                                                {/* 工具调用 */}                        {iteration.tool_calls && iteration.tool_calls.length > 0 && (                          renderToolCalls(iteration.tool_calls)                        )}
                       </div>
                     )}
                   </div>
