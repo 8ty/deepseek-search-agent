@@ -596,7 +596,8 @@ export default function ResultPage() {
       completed: { text: '已完成', color: 'bg-green-500' },
       failed: { text: '失败', color: 'bg-red-500' },
       error: { text: '错误', color: 'bg-red-500' },
-      timeout: { text: '超时', color: 'bg-yellow-500' }
+      timeout: { text: '超时', color: 'bg-yellow-500' },
+      waiting_user_decision: { text: '等待决策', color: 'bg-blue-600' }
     };
 
     const { text, color } = statusMap[status] || statusMap.pending;
@@ -614,7 +615,8 @@ export default function ResultPage() {
               backgroundColor: status === 'pending' ? '#6b7280' :
                                status === 'processing' || status === 'running' ? '#3b82f6' :
                                status === 'completed' ? '#10b981' : 
-                               status === 'timeout' ? '#eab308' : '#ef4444'
+                               status === 'timeout' ? '#eab308' :
+                               status === 'waiting_user_decision' ? '#2563eb' : '#ef4444'
             }}>
         {text}
       </span>
