@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
             },
             body: JSON.stringify({
               // event_type: 'search-request',中斜杠是另一个
-              event_type: 'search_request',
+              event_type: 'search_trigger',
               client_payload: webhookData
             })
           }

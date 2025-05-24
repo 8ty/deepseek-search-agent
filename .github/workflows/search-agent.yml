@@ -1,8 +1,14 @@
-name: DeepSeek Search Agent
+# 🚫 已禁用 - 请使用 search_agent.yml (🔍 DeepSeek 搜索代理)
+# 此工作流已被新版本替代，保留仅供参考
+name: "[已禁用] DeepSeek Search Agent (旧版本)"
 
-on:
-  repository_dispatch:
-    types: [search-request]
+# 禁用此工作流 - 注释掉触发器
+# on:
+#   repository_dispatch:
+#     types: [search-request]
+
+# 保留原始配置供参考，但已禁用
+on: []  # 空的触发器数组，确保此工作流不会被触发
 
 jobs:
   run-search-agent:
