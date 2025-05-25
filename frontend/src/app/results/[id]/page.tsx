@@ -735,8 +735,6 @@ export default function ResultPage() {
   
   // 页面内继续搜索的状态
   const [isContinueSearchLoading, setIsContinueSearchLoading] = useState(false);
-  const [continueSearchState, setContinueSearchState] = useState<SearchData | null>(null);
-  const [continueSearchId, setContinueSearchId] = useState<string | null>(null);
 
   // 从 localStorage 加载 debug 模式设置
   useEffect(() => {
@@ -1094,58 +1092,7 @@ export default function ResultPage() {
     }
   };
 
-  // 轮询继续搜索状态
-  const startContinueSearchPolling = (continueSearchId: string) => {
-    let intervalRef: ReturnType<typeof setInterval> | null = null;
-    let timeoutRef: ReturnType<typeof setTimeout> | null = null;
-    
-    const pollContinueSearch = async () => {
-      try {
-        const response = await fetch(`/api/search-status/${continueSearchId}`);
-        if (response.ok) {
-          const data = await response.json();
-          setContinueSearchState(data);
-          
-          // 如果完成了，停止轮询
-          if (data.status === 'completed' || data.status === 'failed' || data.status === 'error' || data.status === 'timeout') {
-            if (intervalRef) {
-              clearInterval(intervalRef);
-              intervalRef = null;
-            }
-            if (timeoutRef) {
-              clearTimeout(timeoutRef);
-              timeoutRef = null;
-            }
-            return true; // 表示轮询已完成
-          }
-        }
-        return false; // 表示需要继续轮询
-      } catch (error) {
-        console.error('轮询继续搜索状态失败:', error);
-        return false;
-      }
-    };
-    
-    // 立即执行一次
-    pollContinueSearch().then((completed) => {
-      if (completed) return; // 如果已经完成，不需要开始轮询
-      
-      // 每5秒轮询一次
-      intervalRef = setInterval(async () => {
-        const completed = await pollContinueSearch();
-        // pollContinueSearch 内部已经处理了停止轮询的逻辑
-      }, 5000);
-      
-      // 30秒后自动停止轮询（防止无限轮询）
-      timeoutRef = setTimeout(() => {
-        if (intervalRef) {
-          clearInterval(intervalRef);
-          intervalRef = null;
-        }
-        console.warn('继续搜索轮询已超时停止');
-      }, 30000);
-    });
-  };
+
 
   // 渲染搜索结果
   const renderSearchResults = () => {
@@ -1684,37 +1631,7 @@ export default function ResultPage() {
                        '🚀 继续深入搜索'
                      )}
                    </button>
-                   
-                   {/* 显示继续搜索的状态和结果 */}
-                   {continueSearchState && (
-                     <div className="mt-4 p-3 bg-white border border-blue-200 rounded-lg">
-                       <div className="flex items-center mb-2">
-                         <span className="text-sm font-medium text-blue-800">继续搜索状态: </span>
-                         {renderStatusBadge(continueSearchState.status)}
-                       </div>
-                       
-                       {continueSearchState.status === 'processing' && (
-                         <div className="text-sm text-blue-600">
-                           🔄 正在基于已有信息继续搜索...
-                         </div>
-                       )}
-                       
-                       {continueSearchState.status === 'completed' && continueSearchState.answer && (
-                         <div className="mt-2">
-                           <h4 className="font-medium text-blue-800 mb-2">🆕 继续搜索结果:</h4>
-                           <div className="bg-blue-50 p-3 rounded border border-blue-200">
-                             {renderResultContent(continueSearchState.answer)}
-                           </div>
-                         </div>
-                       )}
-                       
-                       {continueSearchState.status === 'failed' && (
-                         <div className="mt-2 text-sm text-red-600">
-                           ❌ 继续搜索失败: {continueSearchState.error || '未知错误'}
-                         </div>
-                       )}
-                     </div>
-                   )}
+
                 </div>
               </div>
             </div>
