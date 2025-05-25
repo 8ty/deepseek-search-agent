@@ -1034,35 +1034,61 @@ export default function ResultPage() {
             </div>
           </div>
 
-          {/* 如果搜索已完成且有结果 */}
-          {searchData.status === 'completed' && (searchData.answer || searchData.results?.answer || searchData.result) && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6"
+          {/* 如果搜索已完成或超时但有结果 */}
+          {((searchData.status === 'completed') || 
+            (searchData.status === 'timeout' && (searchData.answer || searchData.results?.answer || searchData.result || searchData.summary))) && 
+           (searchData.answer || searchData.results?.answer || searchData.result || searchData.summary) && (
+            <div className={`border rounded-lg p-4 mb-6 ${
+              searchData.status === 'completed' 
+                ? 'bg-green-50 border-green-200' 
+                : 'bg-amber-50 border-amber-200'
+            }`}
                  style={{
-                   backgroundColor: '#f0fdf4',
-                   border: '1px solid #bbf7d0',
+                   backgroundColor: searchData.status === 'completed' ? '#f0fdf4' : '#fffbeb',
+                   border: searchData.status === 'completed' ? '1px solid #bbf7d0' : '1px solid #fed7aa',
                    borderRadius: '8px',
                    padding: '16px',
                    marginBottom: '24px'
                  }}>
-              <h3 className="text-lg font-medium text-green-800 mb-2"
+              <h3 className={`text-lg font-medium mb-2 ${
+                searchData.status === 'completed' ? 'text-green-800' : 'text-amber-800'
+              }`}
                   style={{
                     fontSize: '1.125rem',
                     fontWeight: '500',
-                    color: '#166534',
+                    color: searchData.status === 'completed' ? '#166534' : '#92400e',
                     marginBottom: '8px'
-                  }}>最终结果</h3>
+                  }}>
+                {searchData.status === 'completed' ? '🎉 最终结果' : '📋 基于已收集信息的结果'}
+              </h3>
+              {searchData.status === 'timeout' && (
+                <div className="text-amber-700 text-sm mb-3 p-2 bg-amber-100 rounded"
+                     style={{
+                       color: '#b45309',
+                       fontSize: '0.875rem',
+                       marginBottom: '12px',
+                       padding: '8px',
+                       backgroundColor: '#fef3c7',
+                       borderRadius: '6px'
+                     }}>
+                  💡 搜索达到最大轮数限制，以下是基于已收集信息生成的结果：
+                </div>
+              )}
               <div className="prose max-w-none"
                    style={{
                      maxWidth: 'none',
-                     color: '#166534'
+                     color: searchData.status === 'completed' ? '#166534' : '#92400e'
                    }}>
-                <ReactMarkdown>{searchData.answer || searchData.results?.answer || searchData.result || '暂无结果'}</ReactMarkdown>
+                <ReactMarkdown>
+                  {searchData.answer || searchData.results?.answer || searchData.result || searchData.summary || '暂无结果'}
+                </ReactMarkdown>
               </div>
             </div>
           )}
 
-          {/* 如果搜索超时 */}
-          {searchData.status === 'timeout' && (
+          {/* 如果搜索超时且没有显示结果，显示超时处理器 */}
+          {searchData.status === 'timeout' && 
+           !(searchData.answer || searchData.results?.answer || searchData.result || searchData.summary) && (
             <TimeoutHandler
               searchData={searchData}
               searchId={id}
@@ -1072,6 +1098,78 @@ export default function ResultPage() {
                 window.location.reload();
               }}
             />
+          )}
+
+          {/* 如果搜索超时但有结果，显示继续搜索选项 */}
+          {searchData.status === 'timeout' && 
+           (searchData.answer || searchData.results?.answer || searchData.result || searchData.summary) && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6"
+                 style={{
+                   backgroundColor: '#eff6ff',
+                   border: '1px solid #bfdbfe',
+                   borderRadius: '8px',
+                   padding: '16px',
+                   marginBottom: '24px'
+                 }}>
+              <div className="flex items-start" style={{ display: 'flex', alignItems: 'flex-start' }}>
+                <div className="flex-shrink-0" style={{ flexShrink: 0 }}>
+                  <svg className="h-5 w-5 text-blue-400" 
+                       style={{ width: '20px', height: '20px', color: '#60a5fa' }}
+                       xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3" style={{ marginLeft: '12px', flex: 1 }}>
+                  <h3 className="text-lg font-medium text-blue-800 mb-2"
+                      style={{
+                        fontSize: '1.125rem',
+                        fontWeight: '500',
+                        color: '#1e40af',
+                        marginBottom: '8px'
+                      }}>
+                    🔍 需要更详细的信息？
+                  </h3>
+                  <p className="text-blue-700 mb-4"
+                     style={{ color: '#1d4ed8', marginBottom: '16px' }}>
+                    已基于收集的信息生成了结果。如需获取更详细的信息，可以继续深入搜索。
+                  </p>
+                  <button
+                    onClick={async () => {
+                      const response = await fetch('/api/continue-search', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ search_id: id, max_rounds: 3 }),
+                      });
+                      if (response.ok) {
+                        const result = await response.json();
+                        if (result.redirect_url) {
+                          window.location.href = result.redirect_url;
+                        }
+                      }
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
+                    style={{
+                      backgroundColor: '#2563eb',
+                      color: 'white',
+                      fontWeight: '500',
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#1d4ed8';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#2563eb';
+                    }}
+                  >
+                    🔄 继续深入搜索
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* 如果搜索失败 */}
