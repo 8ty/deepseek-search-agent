@@ -1718,74 +1718,7 @@ export default function ResultPage() {
             </div>
           )}
 
-          {/* 如果搜索超时且没有显示结果，显示超时处理器 */}
-          {searchData.status === 'timeout' && 
-           !(searchData.answer || searchData.results?.answer || searchData.result || searchData.summary) && (
-            <button
-                     onClick={async () => {
-                       try {
-                         const response = await fetch('/api/continue-search', {
-                           method: 'POST',
-                           headers: { 'Content-Type': 'application/json' },
-                           body: JSON.stringify({ search_id: id, max_rounds: 3 }),
-                         });
-                         
-                         if (response.ok) {
-                           const result = await response.json();
-                           if (result.redirect_url) {
-                             window.location.href = result.redirect_url;
-                           }
-                         } else {
-                           const errorData = await response.json();
-                           console.error('继续搜索失败:', errorData);
-                           
-                           // 显示友好的错误信息
-                           let errorMessage = `❌ ${errorData.error || '继续搜索失败'}\n\n`;
-                           
-                           if (errorData.details) {
-                             if (errorData.details.suggestion) {
-                               errorMessage += `💡 ${errorData.details.suggestion}\n\n`;
-                             }
-                             if (errorData.details.status) {
-                               errorMessage += `🔍 错误详情：HTTP ${errorData.details.status} ${errorData.details.statusText || ''}\n`;
-                             }
-                             if (errorData.details.githubError) {
-                               errorMessage += `📝 GitHub 响应：${errorData.details.githubError}\n\n`;
-                             }
-                           }
-                           
-                           errorMessage += `⏰ 当前可以查看已收集的信息。`;
-                           alert(errorMessage);
-                         }
-                       } catch (error) {
-                         console.error('继续搜索请求失败:', error);
-                         alert('❌ 网络请求失败，请检查网络连接后重试。');
-                       }
-                     }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
-                    style={{
-                      backgroundColor: '#2563eb',
-                      color: 'white',
-                      fontWeight: '500',
-                      padding: '8px 16px',
-                      borderRadius: '6px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      transition: 'background-color 0.2s'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#1d4ed8';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = '#2563eb';
-                    }}
-                  >
-                    🔄 继续深入搜索
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+
 
           {/* 如果搜索失败 */}
           {(searchData.status === 'failed' || searchData.status === 'error') && (
