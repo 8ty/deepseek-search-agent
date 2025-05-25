@@ -732,6 +732,11 @@ export default function ResultPage() {
   const [activeIteration, setActiveIteration] = useState<number | null>(null);
   const [debugMode, setDebugMode] = useState<boolean>(false);
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
+  
+  // 页面内继续搜索的状态
+  const [isContinueSearchLoading, setIsContinueSearchLoading] = useState(false);
+  const [continueSearchState, setContinueSearchState] = useState<SearchData | null>(null);
+  const [continueSearchId, setContinueSearchId] = useState<string | null>(null);
 
   // 从 localStorage 加载 debug 模式设置
   useEffect(() => {
@@ -950,6 +955,318 @@ export default function ResultPage() {
             )}
           </div>
         ))}
+      </div>
+    );
+  };
+
+  // 智能渲染结果内容（支持JSON和Markdown）
+  const renderResultContent = (content: string) => {
+    if (!content) return '暂无结果';
+    
+    // 尝试解析JSON格式的内容
+    try {
+      const jsonData = JSON.parse(content);
+      
+      // 检查是否是搜索结果的JSON格式
+      if (jsonData && typeof jsonData === 'object') {
+        if (jsonData.status_update || jsonData.answer || jsonData.tool_calls || jsonData.memory_updates) {
+          // 这是一个搜索结果的JSON，进行格式化展示
+          return (
+            <div className="space-y-4">
+              {/* 状态更新 */}
+              {jsonData.status_update && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <h4 className="font-medium text-blue-800 mb-1">📊 状态更新</h4>
+                  <div className="text-blue-700">
+                    <span className={`inline-block px-2 py-1 rounded text-sm ${
+                      jsonData.status_update === 'DONE' ? 'bg-green-100 text-green-800' :
+                      jsonData.status_update === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-blue-100 text-blue-800'
+                    }`}>
+                      {jsonData.status_update}
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              {/* 主要答案 */}
+              {jsonData.answer && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-medium text-green-800 mb-2">✅ 搜索结果</h4>
+                  <div className="prose max-w-none text-green-700">
+                    <ReactMarkdown>{jsonData.answer}</ReactMarkdown>
+                  </div>
+                </div>
+              )}
+              
+              {/* 工具调用 */}
+              {jsonData.tool_calls && jsonData.tool_calls.length > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <h4 className="font-medium text-yellow-800 mb-2">🔧 工具调用详情</h4>
+                  <div className="space-y-2">
+                    {jsonData.tool_calls.map((call: any, index: number) => (
+                      <div key={index} className="bg-white rounded p-2 border border-yellow-300">
+                        <div className="font-medium text-yellow-800">{call.tool || '未知工具'}</div>
+                        {call.input && <div className="text-sm text-yellow-700 mt-1">{call.input}</div>}
+                        {call.output && (
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-sm text-yellow-600">查看输出</summary>
+                            <div className="mt-1 text-xs text-yellow-600 whitespace-pre-wrap bg-yellow-50 p-2 rounded">
+                              {call.output}
+                            </div>
+                          </details>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* 内存更新 */}
+              {jsonData.memory_updates && jsonData.memory_updates.length > 0 && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <h4 className="font-medium text-purple-800 mb-2">🧠 内存更新</h4>
+                  <div className="space-y-1">
+                    {jsonData.memory_updates.map((update: any, index: number) => (
+                      <div key={index} className="text-sm text-purple-700">• {update}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* 原始JSON展示 */}
+              <details className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <summary className="cursor-pointer text-sm text-gray-600 font-medium">🔍 查看原始JSON数据</summary>
+                <pre className="mt-2 text-xs text-gray-600 overflow-auto max-h-40 bg-white p-2 rounded border">
+                  {JSON.stringify(jsonData, null, 2)}
+                </pre>
+              </details>
+            </div>
+          );
+        }
+      }
+    } catch (e) {
+      // JSON解析失败，但这是正常的，继续用Markdown渲染
+    }
+    
+    // 不是JSON或解析失败，使用Markdown渲染
+    return <ReactMarkdown>{content}</ReactMarkdown>;
+  };
+
+  // 页面内继续搜索处理函数
+  const handleInPageContinueSearch = async () => {
+    setIsContinueSearchLoading(true);
+    
+    try {
+      // 使用新的continue-search API，但是在同一页面内展示结果
+      const response = await fetch('/api/continue-search-inline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          search_id: id, 
+          max_rounds: 3,
+          inline_mode: true  // 标识为页面内模式
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        
+        if (result.search_id) {
+          // 设置新的搜索ID，开始轮询这个新搜索的状态
+          setContinueSearchId(result.search_id);
+          setContinueSearchState({
+            status: 'processing',
+            query: `继续搜索：${searchData?.query || ''}`,
+            createdAt: new Date().toISOString(),
+            search_id: result.search_id
+          });
+          
+          // 开始轮询继续搜索的状态
+          startContinueSearchPolling(result.search_id);
+        }
+      } else {
+        const errorData = await response.json();
+        setContinueSearchState({
+          status: 'failed',
+          query: `继续搜索：${searchData?.query || ''}`,
+          createdAt: new Date().toISOString(),
+          error: errorData.error || '继续搜索失败'
+        });
+        console.error('继续搜索失败:', errorData);
+      }
+    } catch (error) {
+      console.error('继续搜索请求失败:', error);
+      setContinueSearchState({
+        status: 'failed',
+        query: `继续搜索：${searchData?.query || ''}`,
+        createdAt: new Date().toISOString(),
+        error: '继续搜索请求失败'
+      });
+    } finally {
+      setIsContinueSearchLoading(false);
+    }
+  };
+
+  // 轮询继续搜索状态
+  const startContinueSearchPolling = (continueSearchId: string) => {
+    const pollContinueSearch = async () => {
+      try {
+        const response = await fetch(`/api/search-status/${continueSearchId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setContinueSearchState(data);
+          
+          // 如果完成了，停止轮询
+          if (data.status === 'completed' || data.status === 'failed' || data.status === 'error' || data.status === 'timeout') {
+            return; // 结束轮询
+          }
+        }
+      } catch (error) {
+        console.error('轮询继续搜索状态失败:', error);
+      }
+    };
+    
+    // 立即执行一次
+    pollContinueSearch();
+    
+    // 每5秒轮询一次
+    const interval = setInterval(async () => {
+      await pollContinueSearch();
+      
+      // 检查是否需要停止轮询
+      if (continueSearchState?.status && 
+          ['completed', 'failed', 'error', 'timeout'].includes(continueSearchState.status)) {
+        clearInterval(interval);
+      }
+    }, 5000);
+    
+    // 30秒后自动停止轮询（防止无限轮询）
+    setTimeout(() => {
+      clearInterval(interval);
+    }, 30000);
+  };
+
+  // 渲染搜索结果
+  const renderSearchResults = () => {
+    const hasResult = searchData.answer || searchData.results?.answer || searchData.result || searchData.summary;
+    const isCompleted = searchData.status === 'completed';
+    const isTimeoutWithResult = searchData.status === 'timeout' && hasResult;
+    
+    if (!isCompleted && !isTimeoutWithResult) {
+      return null;
+    }
+    
+    return (
+      <div className={`border rounded-lg p-4 mb-6 ${
+        isCompleted ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'
+      }`}
+           style={{
+             backgroundColor: isCompleted ? '#f0fdf4' : '#fffbeb',
+             border: isCompleted ? '1px solid #bbf7d0' : '1px solid #fed7aa',
+             borderRadius: '8px',
+             padding: '16px',
+             marginBottom: '24px'
+           }}>
+        <h3 className={`text-lg font-medium mb-2 ${
+          isCompleted ? 'text-green-800' : 'text-amber-800'
+        }`}
+            style={{
+              fontSize: '1.125rem',
+              fontWeight: '500',
+              color: isCompleted ? '#166534' : '#92400e',
+              marginBottom: '8px'
+            }}>
+          {isCompleted ? '🎉 最终结果' : '📋 基于已收集信息的结果'}
+        </h3>
+        
+        {isTimeoutWithResult && (
+          <div className="text-amber-700 text-sm mb-3 p-2 bg-amber-100 rounded"
+               style={{
+                 color: '#b45309',
+                 fontSize: '0.875rem',
+                 marginBottom: '12px',
+                 padding: '8px',
+                 backgroundColor: '#fef3c7',
+                 borderRadius: '6px'
+               }}>
+            💡 搜索达到最大轮数限制，以下是基于已收集信息生成的结果：
+          </div>
+        )}
+        
+        <div className="prose max-w-none"
+             style={{
+               maxWidth: 'none',
+               color: isCompleted ? '#166534' : '#92400e'
+             }}>
+          {renderResultContent(
+            searchData.answer || 
+            searchData.results?.answer || 
+            searchData.result || 
+            searchData.summary || 
+            '暂无结果'
+          )}
+        </div>
+        
+        {/* 超时状态下显示原始搜索记录 */}
+        {isTimeoutWithResult && searchData.iterations && searchData.iterations.length > 0 && (
+          <details className="mt-4 bg-white border border-amber-300 rounded-lg p-3">
+            <summary className="cursor-pointer text-amber-800 font-medium">
+              📚 查看原始搜索记录 ({searchData.iterations.length} 轮迭代)
+            </summary>
+            <div className="mt-3 space-y-3">
+              {searchData.iterations.map((iteration, index) => (
+                <div key={index} className="border border-amber-200 rounded-lg p-3 bg-amber-25">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-medium text-amber-800">第 {iteration.round} 轮</span>
+                    <span className="text-xs text-amber-600">
+                      {new Date(iteration.timestamp).toLocaleString()}
+                    </span>
+                  </div>
+                  
+                  {iteration.workspace_state && (
+                    <div className="mb-2">
+                      <h5 className="font-medium text-amber-700 mb-1">工作空间状态:</h5>
+                      <div className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
+                        {renderMemoryBlocks(iteration.workspace_state)}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {iteration.tool_calls && iteration.tool_calls.length > 0 && (
+                    <div>
+                      <h5 className="font-medium text-amber-700 mb-1">执行的工具:</h5>
+                      <div className="space-y-1">
+                        {iteration.tool_calls.map((call, callIndex) => (
+                          <div key={callIndex} className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
+                            <div className="font-medium">{call.tool}: {call.input}</div>
+                            {call.output && (
+                              <details className="mt-1">
+                                <summary className="cursor-pointer text-xs text-amber-500">查看结果</summary>
+                                <div className="mt-1 text-xs text-amber-500 whitespace-pre-wrap">
+                                  {call.output}
+                                </div>
+                              </details>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {iteration.raw_response && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs text-amber-500 font-medium">查看原始响应</summary>
+                      <pre className="mt-1 text-xs text-amber-500 whitespace-pre-wrap bg-amber-50 p-2 rounded overflow-auto max-h-32">
+                        {iteration.raw_response}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
       </div>
     );
   };
@@ -1283,57 +1600,8 @@ export default function ResultPage() {
           {/* GitHub Actions 状态面板 */}
           <GitHubActionsStatusPanel searchId={id} />
 
-          {/* 如果搜索已完成或超时但有结果 */}
-          {((searchData.status === 'completed') || 
-            (searchData.status === 'timeout' && (searchData.answer || searchData.results?.answer || searchData.result || searchData.summary))) && 
-           (searchData.answer || searchData.results?.answer || searchData.result || searchData.summary) && (
-            <div className={`border rounded-lg p-4 mb-6 ${
-              searchData.status === 'completed' 
-                ? 'bg-green-50 border-green-200' 
-                : 'bg-amber-50 border-amber-200'
-            }`}
-                 style={{
-                   backgroundColor: searchData.status === 'completed' ? '#f0fdf4' : '#fffbeb',
-                   border: searchData.status === 'completed' ? '1px solid #bbf7d0' : '1px solid #fed7aa',
-                   borderRadius: '8px',
-                   padding: '16px',
-                   marginBottom: '24px'
-                 }}>
-              <h3 className={`text-lg font-medium mb-2 ${
-                searchData.status === 'completed' ? 'text-green-800' : 'text-amber-800'
-              }`}
-                  style={{
-                    fontSize: '1.125rem',
-                    fontWeight: '500',
-                    color: searchData.status === 'completed' ? '#166534' : '#92400e',
-                    marginBottom: '8px'
-                  }}>
-                {searchData.status === 'completed' ? '🎉 最终结果' : '📋 基于已收集信息的结果'}
-              </h3>
-              {searchData.status === 'timeout' && (
-                <div className="text-amber-700 text-sm mb-3 p-2 bg-amber-100 rounded"
-                     style={{
-                       color: '#b45309',
-                       fontSize: '0.875rem',
-                       marginBottom: '12px',
-                       padding: '8px',
-                       backgroundColor: '#fef3c7',
-                       borderRadius: '6px'
-                     }}>
-                  💡 搜索达到最大轮数限制，以下是基于已收集信息生成的结果：
-                </div>
-              )}
-              <div className="prose max-w-none"
-                   style={{
-                     maxWidth: 'none',
-                     color: searchData.status === 'completed' ? '#166534' : '#92400e'
-                   }}>
-                <ReactMarkdown>
-                  {searchData.answer || searchData.results?.answer || searchData.result || searchData.summary || '暂无结果'}
-                </ReactMarkdown>
-              </div>
-            </div>
-          )}
+          {/* 渲染结果组件 */}
+          {renderSearchResults()}
 
           {/* 如果搜索超时且没有显示结果，显示超时处理器 */}
           {searchData.status === 'timeout' && 
@@ -1380,9 +1648,80 @@ export default function ResultPage() {
                   </h3>
                   <p className="text-blue-700 mb-4"
                      style={{ color: '#1d4ed8', marginBottom: '16px' }}>
-                    已基于收集的信息生成了结果。如需获取更详细的信息，可以继续深入搜索。
+                    已基于收集的信息生成了结果。如需获取更详细的信息，可以在当前页面继续深入搜索。
                   </p>
-                                     <button
+                  <button
+                     onClick={handleInPageContinueSearch}
+                     disabled={isContinueSearchLoading}
+                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                       isContinueSearchLoading 
+                         ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                         : 'bg-blue-600 text-white hover:bg-blue-700'
+                     }`}
+                     style={{
+                       padding: '8px 16px',
+                       borderRadius: '8px',
+                       fontWeight: '500',
+                       transition: 'background-color 0.2s',
+                       backgroundColor: isContinueSearchLoading ? '#d1d5db' : '#2563eb',
+                       color: isContinueSearchLoading ? '#6b7280' : 'white',
+                       cursor: isContinueSearchLoading ? 'not-allowed' : 'pointer',
+                       border: 'none'
+                     }}>
+                     {isContinueSearchLoading ? (
+                       <>
+                         <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-500 inline" 
+                              style={{ animation: 'spin 1s linear infinite', marginLeft: '-4px', marginRight: '8px', width: '16px', height: '16px' }}
+                              xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                         </svg>
+                         正在继续搜索...
+                       </>
+                     ) : (
+                       '🚀 继续深入搜索'
+                     )}
+                   </button>
+                   
+                   {/* 显示继续搜索的状态和结果 */}
+                   {continueSearchState && (
+                     <div className="mt-4 p-3 bg-white border border-blue-200 rounded-lg">
+                       <div className="flex items-center mb-2">
+                         <span className="text-sm font-medium text-blue-800">继续搜索状态: </span>
+                         {renderStatusBadge(continueSearchState.status)}
+                       </div>
+                       
+                       {continueSearchState.status === 'processing' && (
+                         <div className="text-sm text-blue-600">
+                           🔄 正在基于已有信息继续搜索...
+                         </div>
+                       )}
+                       
+                       {continueSearchState.status === 'completed' && continueSearchState.answer && (
+                         <div className="mt-2">
+                           <h4 className="font-medium text-blue-800 mb-2">🆕 继续搜索结果:</h4>
+                           <div className="bg-blue-50 p-3 rounded border border-blue-200">
+                             {renderResultContent(continueSearchState.answer)}
+                           </div>
+                         </div>
+                       )}
+                       
+                       {continueSearchState.status === 'failed' && (
+                         <div className="mt-2 text-sm text-red-600">
+                           ❌ 继续搜索失败: {continueSearchState.error || '未知错误'}
+                         </div>
+                       )}
+                     </div>
+                   )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 如果搜索超时且没有显示结果，显示超时处理器 */}
+          {searchData.status === 'timeout' && 
+           !(searchData.answer || searchData.results?.answer || searchData.result || searchData.summary) && (
+            <button
                      onClick={async () => {
                        try {
                          const response = await fetch('/api/continue-search', {
