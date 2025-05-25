@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { list } from '@vercel/blob';
 import memoryStorage from '../../../../lib/storage';
+import { redisUtils } from '../../../../lib/upstash';
 
 // 注意：在生产环境中应该使用真实的数据库或KV存储
 // 目前使用共享内存存储进行演示
@@ -16,31 +17,47 @@ export async function GET(
       return NextResponse.json({ error: '缺少搜索ID' }, { status: 400 });
     }
 
-    // 首先尝试从Vercel Blob获取
+    // 首先尝试从 Upstash Redis 获取
     let searchData;
     try {
-      const blobList = await list({
-        prefix: 'searches/',
-        limit: 1000
-      });
-
-      const targetBlob = blobList.blobs.find(blob => 
-        blob.pathname === `searches/${id}.json`
-      );
-
-      if (targetBlob) {
-        const response = await fetch(targetBlob.url);
-        if (response.ok) {
-          searchData = await response.json();
-        }
+      searchData = await redisUtils.getSearchData(id);
+      if (searchData) {
+        console.log(`从 Upstash Redis 读取到搜索数据: ${id}`);
       }
     } catch (error) {
-      console.warn('Vercel Blob不可用，回退到内存存储:', error);
+      console.warn('Upstash Redis 不可用，尝试 Vercel Blob:', error);
     }
 
-    // 如果Blob没有数据，回退到内存存储
+    // 如果 Redis 没有数据，尝试从 Vercel Blob 获取
+    if (!searchData) {
+      try {
+        const blobList = await list({
+          prefix: 'searches/',
+          limit: 1000
+        });
+
+        const targetBlob = blobList.blobs.find(blob => 
+          blob.pathname === `searches/${id}.json`
+        );
+
+        if (targetBlob) {
+          const response = await fetch(targetBlob.url);
+          if (response.ok) {
+            searchData = await response.json();
+            console.log(`从 Vercel Blob 读取到搜索数据: ${id}`);
+          }
+        }
+      } catch (error) {
+        console.warn('Vercel Blob不可用，回退到内存存储:', error);
+      }
+    }
+
+    // 如果都没有数据，回退到内存存储
     if (!searchData) {
       searchData = memoryStorage.get(`search:${id}`);
+      if (searchData) {
+        console.log(`从内存存储读取到搜索数据: ${id}`);
+      }
     }
 
     if (!searchData) {

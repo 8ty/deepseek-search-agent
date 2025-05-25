@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import memoryStorage from '../../../lib/storage';
 import { list, put } from '@vercel/blob';
+import { redisUtils } from '../../../lib/upstash';
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,39 +22,52 @@ export async function POST(request: NextRequest) {
 
     console.log(`🔍 开始查找搜索状态，search_id: ${search_id}`);
 
-    // 从Vercel Blob读取之前的搜索状态
+    // 优先从 Upstash Redis 读取之前的搜索状态
     let previousSearchState = null;
     try {
-      console.log('📡 尝试从Vercel Blob读取搜索状态...');
-      // 使用list方法来检查文件是否存在，然后读取内容
-      const listResult = await list({
-        prefix: `searches/${search_id}.json`,
-        limit: 1
-      });
-      
-      console.log(`🔍 Blob list结果: 找到 ${listResult.blobs.length} 个文件`);
-      
-      if (listResult.blobs.length > 0) {
-        const blob = listResult.blobs[0];
-        console.log(`📄 找到Blob文件: ${blob.pathname}, URL: ${blob.url}`);
-        
-        // 通过URL获取blob内容
-        const blobResponse = await fetch(blob.url);
-        if (blobResponse.ok) {
-          const blobText = await blobResponse.text();
-          previousSearchState = JSON.parse(blobText);
-          console.log(`✅ 从Blob读取到搜索状态用于总结: ${search_id}`);
-        } else {
-          console.warn('⚠️ Blob响应不成功:', blobResponse.status, blobResponse.statusText);
-        }
-      } else {
-        console.warn(`⚠️ Blob中未找到搜索状态: searches/${search_id}.json`);
+      console.log('📡 尝试从Upstash Redis读取搜索状态...');
+      previousSearchState = await redisUtils.getSearchData(search_id);
+      if (previousSearchState) {
+        console.log(`✅ 从Upstash Redis读取到搜索状态用于总结: ${search_id}`);
       }
-    } catch (blobError) {
-      console.warn('⚠️ 从Blob读取搜索状态失败，尝试从内存读取:', blobError);
+    } catch (redisError) {
+      console.warn('⚠️ 从Upstash Redis读取搜索状态失败，尝试Vercel Blob:', redisError);
     }
 
-    // 如果Blob中没有，尝试从内存读取
+    // 如果 Redis 中没有，尝试从 Vercel Blob 读取
+    if (!previousSearchState) {
+      try {
+        console.log('📡 尝试从Vercel Blob读取搜索状态...');
+        // 使用list方法来检查文件是否存在，然后读取内容
+        const listResult = await list({
+          prefix: `searches/${search_id}.json`,
+          limit: 1
+        });
+        
+        console.log(`🔍 Blob list结果: 找到 ${listResult.blobs.length} 个文件`);
+        
+        if (listResult.blobs.length > 0) {
+          const blob = listResult.blobs[0];
+          console.log(`📄 找到Blob文件: ${blob.pathname}, URL: ${blob.url}`);
+          
+          // 通过URL获取blob内容
+          const blobResponse = await fetch(blob.url);
+          if (blobResponse.ok) {
+            const blobText = await blobResponse.text();
+            previousSearchState = JSON.parse(blobText);
+            console.log(`✅ 从Blob读取到搜索状态用于总结: ${search_id}`);
+          } else {
+            console.warn('⚠️ Blob响应不成功:', blobResponse.status, blobResponse.statusText);
+          }
+        } else {
+          console.warn(`⚠️ Blob中未找到搜索状态: searches/${search_id}.json`);
+        }
+      } catch (blobError) {
+        console.warn('⚠️ 从Blob读取搜索状态失败，尝试从内存读取:', blobError);
+      }
+    }
+
+    // 如果都没有，尝试从内存读取
     if (!previousSearchState) {
       console.log('🧠 尝试从内存读取搜索状态...');
       previousSearchState = memoryStorage.get(`search:${search_id}`);
@@ -109,16 +123,25 @@ export async function POST(request: NextRequest) {
     console.log('💾 存储到内存...');
     memoryStorage.set(`search:${finalizeSearchId}`, finalizeSearchData);
 
-    // 将新搜索状态存储到Blob
+    // 优先存储到 Upstash Redis
     try {
-      console.log('💾 存储到Blob...');
-      await put(`searches/${finalizeSearchId}.json`, JSON.stringify(finalizeSearchData), {
-        access: 'public',
-        addRandomSuffix: false
-      });
-      console.log('✅ Blob存储成功');
-    } catch (blobError) {
-      console.warn('⚠️ 存储总结任务状态到Blob失败:', blobError);
+      console.log('💾 存储到Upstash Redis...');
+      await redisUtils.setSearchData(finalizeSearchId, finalizeSearchData);
+      console.log('✅ Upstash Redis存储成功');
+    } catch (redisError) {
+      console.warn('⚠️ 存储总结任务状态到Upstash Redis失败，尝试Blob:', redisError);
+      
+      // 如果 Redis 失败，回退到 Vercel Blob
+      try {
+        console.log('💾 存储到Blob...');
+        await put(`searches/${finalizeSearchId}.json`, JSON.stringify(finalizeSearchData), {
+          access: 'public',
+          addRandomSuffix: false
+        });
+        console.log('✅ Blob存储成功');
+      } catch (blobError) {
+        console.warn('⚠️ 存储总结任务状态到Blob也失败:', blobError);
+      }
     }
 
     // 获取GitHub配置

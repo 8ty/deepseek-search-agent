@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import memoryStorage from '../../../lib/storage';
 import { put } from '@vercel/blob';
+import { redisUtils } from '../../../lib/upstash';
 
 // 注意：在生产环境中应该使用真实的数据库或KV存储
 // 目前使用共享内存存储进行演示
@@ -187,9 +188,9 @@ export async function POST(request: Request) {
     memoryStorage.set(`search:${searchId}`, updatedData);
     console.log('数据已存储到内存存储');
 
-    // 存储到Vercel Blob
+    // 优先存储到 Upstash Redis
     try {
-      const blobData = {
+      const searchData = {
         search_id: searchId,
         status: updatedData.status,
         query: updatedData.query,
@@ -206,13 +207,38 @@ export async function POST(request: Request) {
         traceback: updatedData.traceback
       };
 
-      await put(`searches/${searchId}.json`, JSON.stringify(blobData), {
-        access: 'public',
-        addRandomSuffix: false
-      });
-      console.log(`搜索数据已存储到Vercel Blob: searches/${searchId}.json`);
-    } catch (blobError) {
-      console.warn('Vercel Blob存储失败，使用内存存储:', blobError);
+      await redisUtils.setSearchData(searchId, searchData);
+      console.log(`搜索数据已存储到Upstash Redis: ${searchId}`);
+    } catch (redisError) {
+      console.warn('Upstash Redis存储失败，尝试Vercel Blob:', redisError);
+      
+      // 如果 Redis 失败，回退到 Vercel Blob
+      try {
+        const blobData = {
+          search_id: searchId,
+          status: updatedData.status,
+          query: updatedData.query,
+          results: updatedData.results,
+          iterations: updatedData.iterations,
+          answer: updatedData.answer,
+          error: updatedData.error,
+          createdAt: updatedData.createdAt,
+          updatedAt: updatedData.updatedAt,
+          total_rounds: updatedData.total_rounds,
+          message: updatedData.message,
+          summary: updatedData.summary,
+          final_state: updatedData.final_state,
+          traceback: updatedData.traceback
+        };
+
+        await put(`searches/${searchId}.json`, JSON.stringify(blobData), {
+          access: 'public',
+          addRandomSuffix: false
+        });
+        console.log(`搜索数据已存储到Vercel Blob: searches/${searchId}.json`);
+      } catch (blobError) {
+        console.warn('Vercel Blob存储也失败，使用内存存储:', blobError);
+      }
     }
 
     console.log('=== WEBHOOK 处理完成 ===');
