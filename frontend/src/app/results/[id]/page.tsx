@@ -1133,20 +1133,36 @@ export default function ResultPage() {
                      style={{ color: '#1d4ed8', marginBottom: '16px' }}>
                     已基于收集的信息生成了结果。如需获取更详细的信息，可以继续深入搜索。
                   </p>
-                  <button
-                    onClick={async () => {
-                      const response = await fetch('/api/continue-search', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ search_id: id, max_rounds: 3 }),
-                      });
-                      if (response.ok) {
-                        const result = await response.json();
-                        if (result.redirect_url) {
-                          window.location.href = result.redirect_url;
-                        }
-                      }
-                    }}
+                                     <button
+                     onClick={async () => {
+                       try {
+                         const response = await fetch('/api/continue-search', {
+                           method: 'POST',
+                           headers: { 'Content-Type': 'application/json' },
+                           body: JSON.stringify({ search_id: id, max_rounds: 3 }),
+                         });
+                         
+                         if (response.ok) {
+                           const result = await response.json();
+                           if (result.redirect_url) {
+                             window.location.href = result.redirect_url;
+                           }
+                         } else {
+                           const errorData = await response.json();
+                           console.error('继续搜索失败:', errorData);
+                           
+                           // 显示友好的错误信息
+                           if (errorData.details?.suggestion) {
+                             alert(`❌ ${errorData.error}\n\n💡 ${errorData.details.suggestion}\n\n⏰ 当前可以查看已收集的信息。`);
+                           } else {
+                             alert(`❌ 继续搜索失败：${errorData.error || '未知错误'}\n\n💡 您可以稍后重试，或者查看当前已收集的信息。`);
+                           }
+                         }
+                       } catch (error) {
+                         console.error('继续搜索请求失败:', error);
+                         alert('❌ 网络请求失败，请检查网络连接后重试。');
+                       }
+                     }}
                     className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
                     style={{
                       backgroundColor: '#2563eb',

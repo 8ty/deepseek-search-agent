@@ -6,15 +6,20 @@ import { redisUtils } from '../../../lib/upstash';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    console.log('=== 继续搜索API调用 ===');
+    console.log('请求体:', JSON.stringify(body, null, 2));
     
     const { search_id, max_rounds = 3 } = body;
     
     if (!search_id) {
+      console.error('❌ 搜索ID缺失');
       return NextResponse.json(
         { error: "搜索ID缺失" },
         { status: 400 }
       );
     }
+
+    console.log(`🔍 搜索ID: ${search_id}, 额外轮数: ${max_rounds}`);
 
     // 优先从 Upstash Redis 读取之前的搜索状态
     let previousSearchState = null;
@@ -61,11 +66,26 @@ export async function POST(request: NextRequest) {
     }
 
     if (!previousSearchState) {
+      console.error(`❌ 未找到原始搜索数据，搜索ID: ${search_id}`);
+      console.log('🔍 数据查找总结:');
+      console.log('- Upstash Redis: 未找到');
+      console.log('- Vercel Blob: 未找到');
+      console.log('- 内存存储: 未找到');
+      
       return NextResponse.json(
-        { error: "未找到原始搜索数据" },
+        { 
+          error: "未找到原始搜索数据",
+          details: {
+            search_id: search_id,
+            checked_sources: ['upstash_redis', 'vercel_blob', 'memory_storage'],
+            suggestion: "请确认搜索ID是否正确，或者原始搜索是否已完成"
+          }
+        },
         { status: 404 }
       );
     }
+
+    console.log(`✅ 找到搜索状态，查询: ${previousSearchState.query}`);
 
     // 生成新的搜索ID用于继续搜索
     const newSearchId = `${search_id}-continue-${Date.now()}`;
@@ -88,10 +108,51 @@ export async function POST(request: NextRequest) {
     const envGithubRepository = process.env.GITHUB_REPOSITORY;
     
     if (!envGithubToken || !envGithubRepository) {
-      return NextResponse.json(
-        { error: "GitHub配置未完成，无法继续搜索" },
-        { status: 500 }
-      );
+      console.log('⚠️ GitHub Actions 配置检查:');
+      console.log('- GITHUB_TOKEN存在:', !!envGithubToken);
+      console.log('- GITHUB_REPOSITORY存在:', !!envGithubRepository);
+      console.log('- GITHUB_REPOSITORY值:', envGithubRepository);
+      
+      // 为了调试，我们先创建一个模拟的继续搜索
+      const newSearchId = `${search_id}-continue-${Date.now()}`;
+      const mockSearchData = {
+        status: 'completed' as const,
+        query: `继续搜索：${previousSearchState.query}`,
+        createdAt: new Date().toISOString(),
+        iterations: [
+          {
+            round: 1,
+            timestamp: new Date().toISOString(),
+            workspace_state: `Status: DONE\n<result-1>由于 GitHub Actions 未配置，这是一个模拟的继续搜索结果。\n\n基于之前的搜索（${previousSearchState.iterations?.length || 0} 轮迭代），我们建议：\n\n1. 检查已收集的信息是否满足需求\n2. 如需真实的继续搜索，请配置 GitHub Actions\n3. 当前系统已显示基于已有信息的结果\n\n原始查询: ${previousSearchState.query}</result-1>`,
+            tool_calls: [
+              {
+                tool: 'search',
+                input: `继续搜索：${previousSearchState.query}`,
+                output: '模拟搜索结果 - GitHub Actions 配置缺失'
+              }
+            ]
+          }
+        ],
+        result: null,
+        answer: `🔧 **继续搜索配置提示**\n\n当前 GitHub Actions 未完全配置，无法执行真实的继续搜索。\n\n**配置状态：**\n- GitHub Token: ${!!envGithubToken ? '✅ 已配置' : '❌ 缺失'}\n- GitHub Repository: ${!!envGithubRepository ? '✅ 已配置' : '❌ 缺失'}\n\n**建议操作：**\n1. 在 Vercel 项目设置中配置环境变量\n2. 设置 \`GITHUB_TOKEN\` 和 \`GITHUB_REPOSITORY\`\n3. 重新部署后即可使用继续搜索功能\n\n**当前可用：**\n- 查看已收集的搜索信息（${previousSearchState.iterations?.length || 0} 轮迭代）\n- 基于现有信息的结果分析`,
+        search_id: newSearchId,
+        parent_search_id: search_id,
+        is_continuation: true
+      };
+      
+      // 存储模拟数据以便显示
+      memoryStorage.set(`search:${newSearchId}`, mockSearchData);
+      
+      return NextResponse.json({
+        status: "continue_search_initiated",
+        message: "继续搜索已启动（模拟模式）",
+        search_id: newSearchId,
+        parent_search_id: search_id,
+        additional_rounds: max_rounds,
+        mode: "simulation",
+        redirect_url: `/results/${newSearchId}`,
+        note: "GitHub Actions 未配置，返回配置说明"
+      });
     }
 
     // 更新内存中的搜索状态
