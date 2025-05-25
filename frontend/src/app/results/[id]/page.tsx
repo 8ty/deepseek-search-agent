@@ -62,6 +62,38 @@ interface DebugInfo {
   [timestamp: string]: DebugLogEntry;
 }
 
+// 定义 GitHub Actions 状态类型
+interface GitHubActionRun {
+  id: number;
+  status: 'queued' | 'in_progress' | 'completed';
+  conclusion: 'success' | 'failure' | 'neutral' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | null;
+  workflow_name: string;
+  display_title: string;
+  created_at: string;
+  updated_at: string;
+  html_url: string;
+  head_commit: {
+    message: string;
+    timestamp: string;
+  };
+  event: string;
+  actor: string;
+}
+
+interface GitHubActionsStatus {
+  configured: boolean;
+  repository?: string;
+  runs?: GitHubActionRun[];
+  summary?: {
+    recent_runs: number;
+    running: number;
+    completed: number;
+    success: number;
+    failed: number;
+  };
+  error?: string;
+}
+
 // 超时处理器组件
 interface TimeoutHandlerProps {
   searchData: SearchData;
@@ -470,6 +502,220 @@ const TimeoutHandler: React.FC<TimeoutHandlerProps> = ({
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+// GitHub Actions 状态显示组件
+interface GitHubActionsStatusPanelProps {
+  searchId: string;
+}
+
+const GitHubActionsStatusPanel: React.FC<GitHubActionsStatusPanelProps> = ({ searchId }) => {
+  const [actionsStatus, setActionsStatus] = useState<GitHubActionsStatus | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [expanded, setExpanded] = useState<boolean>(false);
+
+  // 获取 GitHub Actions 状态
+  const fetchActionsStatus = async () => {
+    try {
+      const response = await fetch(`/api/github-actions-status/${searchId}`);
+      const data = await response.json();
+      setActionsStatus(data);
+      setLoading(false);
+    } catch (error) {
+      console.error('获取 GitHub Actions 状态失败:', error);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchActionsStatus();
+    
+    // 每30秒轮询一次状态更新
+    const interval = setInterval(fetchActionsStatus, 30000);
+    
+    return () => clearInterval(interval);
+  }, [searchId]);
+
+  // 渲染运行状态标签
+  const renderStatusBadge = (status: string, conclusion: string | null) => {
+    if (status === 'in_progress') {
+      return (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+          <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          运行中
+        </span>
+      );
+    } else if (status === 'completed') {
+      const colorMap = {
+        success: 'bg-green-100 text-green-800',
+        failure: 'bg-red-100 text-red-800',
+        cancelled: 'bg-gray-100 text-gray-800',
+        neutral: 'bg-yellow-100 text-yellow-800',
+        skipped: 'bg-gray-100 text-gray-800',
+        timed_out: 'bg-orange-100 text-orange-800',
+        action_required: 'bg-purple-100 text-purple-800'
+      };
+      const color = colorMap[conclusion as keyof typeof colorMap] || 'bg-gray-100 text-gray-800';
+      const text = {
+        success: '✅ 成功',
+        failure: '❌ 失败', 
+        cancelled: '⏹️ 取消',
+        neutral: '⚪ 中性',
+        skipped: '⏭️ 跳过',
+        timed_out: '⏰ 超时',
+        action_required: '🔔 需要操作'
+      };
+      
+      return (
+        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${color}`}>
+          {text[conclusion as keyof typeof text] || conclusion}
+        </span>
+      );
+    } else if (status === 'queued') {
+      return (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+          ⏳ 队列中
+        </span>
+      );
+    }
+    
+    return (
+      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+        {status}
+      </span>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+        <div className="flex items-center">
+          <svg className="animate-spin h-4 w-4 text-gray-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span className="text-sm text-gray-600">正在获取 GitHub Actions 状态...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!actionsStatus?.configured) {
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+        <div className="flex items-start">
+          <svg className="h-5 w-5 text-yellow-400 mt-0.5 mr-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+          </svg>
+          <div>
+            <h4 className="text-sm font-medium text-yellow-800">GitHub Actions 未配置</h4>
+            <p className="text-sm text-yellow-700 mt-1">
+              需要配置 GITHUB_TOKEN 和 GITHUB_REPOSITORY 环境变量才能显示工作流状态
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (actionsStatus?.error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+        <div className="flex items-start">
+          <svg className="h-5 w-5 text-red-400 mt-0.5 mr-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+          </svg>
+          <div>
+            <h4 className="text-sm font-medium text-red-800">GitHub Actions 状态获取失败</h4>
+            <p className="text-sm text-red-700 mt-1">{actionsStatus.error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const summary = actionsStatus?.summary;
+  const runs = actionsStatus?.runs || [];
+
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          <svg className="h-5 w-5 text-blue-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <h4 className="text-sm font-medium text-blue-800">GitHub Actions 状态</h4>
+          <span className="text-xs text-blue-600 ml-2">({actionsStatus?.repository})</span>
+        </div>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-blue-600 hover:text-blue-500 text-sm"
+        >
+          {expanded ? '收起' : '展开'}
+        </button>
+      </div>
+
+      {summary && (
+        <div className="mt-3 flex flex-wrap gap-3">
+          <div className="flex items-center text-sm">
+            <span className="text-blue-700">最近运行:</span>
+            <span className="ml-1 font-medium text-blue-800">{summary.recent_runs}</span>
+          </div>
+          {summary.running > 0 && (
+            <div className="flex items-center text-sm">
+              <span className="text-blue-700">运行中:</span>
+              <span className="ml-1 font-medium text-blue-800">{summary.running}</span>
+            </div>
+          )}
+          <div className="flex items-center text-sm">
+            <span className="text-green-700">成功:</span>
+            <span className="ml-1 font-medium text-green-800">{summary.success}</span>
+          </div>
+          {summary.failed > 0 && (
+            <div className="flex items-center text-sm">
+              <span className="text-red-700">失败:</span>
+              <span className="ml-1 font-medium text-red-800">{summary.failed}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {expanded && runs.length > 0 && (
+        <div className="mt-4 space-y-3">
+          <div className="text-sm font-medium text-blue-800">最近的工作流运行:</div>
+          {runs.slice(0, 5).map((run) => (
+            <div key={run.id} className="bg-white rounded-lg border border-blue-200 p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  {renderStatusBadge(run.status, run.conclusion)}
+                  <span className="text-sm font-medium text-gray-900">{run.workflow_name}</span>
+                </div>
+                <a
+                  href={run.html_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-500 text-xs"
+                >
+                  查看详情 →
+                </a>
+              </div>
+              <div className="mt-2 text-xs text-gray-600">
+                <div>触发事件: {run.event}</div>
+                <div>开始时间: {new Date(run.created_at).toLocaleString()}</div>
+                {run.head_commit?.message && (
+                  <div className="mt-1 truncate">提交: {run.head_commit.message}</div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -1033,6 +1279,9 @@ export default function ResultPage() {
               </div>
             </div>
           </div>
+
+          {/* GitHub Actions 状态面板 */}
+          <GitHubActionsStatusPanel searchId={id} />
 
           {/* 如果搜索已完成或超时但有结果 */}
           {((searchData.status === 'completed') || 
