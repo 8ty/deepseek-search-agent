@@ -188,18 +188,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 准备继续搜索的数据，模仿第一次搜索的webhookData格式
+    // 准备继续搜索的数据，使用 enhanced_search.yml 工作流的字段格式
     const continueSearchData = {
-      test_scope: `继续搜索：${previousSearchState.query}`,  // GitHub Actions 期望 test_scope
-      test_config: getCallbackUrl(request),                 // GitHub Actions 期望 test_config
-      environment: newSearchId,                             // GitHub Actions 期望 environment，用于WORKSPACE_ID
-      search_id: newSearchId,                               // 保留原有字段以便兼容
-      test_rounds: max_rounds,                              // GitHub Actions 期望 test_rounds
+      query: `继续搜索：${previousSearchState.query}`,      // enhanced_search.yml 期望 query
+      callback_url: getCallbackUrl(request),               // enhanced_search.yml 期望 callback_url
+      workspace_id: newSearchId,                           // enhanced_search.yml 期望 workspace_id
+      search_id: newSearchId,                              // enhanced_search.yml 期望 search_id
+      max_rounds: max_rounds,                              // enhanced_search.yml 期望 max_rounds
       include_scraping: true,
       debug_mode: false,
-      quiet_mode: true,                                     // GitHub Actions 期望 quiet_mode
-      // 传递精简的上下文信息
-      previous_context: JSON.stringify(compactSearchState),
+      silent_mode: true,                                   // enhanced_search.yml 期望 silent_mode
+      // 传递继续搜索所需的状态信息
+      continue_from_state: JSON.stringify(compactSearchState),
       is_continuation: true,
       parent_search_id: search_id
     };
@@ -216,7 +216,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            event_type: 'search_trigger',  // 使用与第一次搜索相同的事件类型
+            event_type: 'continue_search',  // 继续搜索使用专门的事件类型
             client_payload: continueSearchData
           })
         }

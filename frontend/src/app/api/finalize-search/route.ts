@@ -159,18 +159,18 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ GitHub配置正常: REPO=${envGithubRepository}`);
 
-    // 准备GitHub Actions数据（传递精简的总结信息）
+    // 准备GitHub Actions数据，使用 enhanced_search.yml 工作流的字段格式
     const finalizeData = {
-      test_scope: `总结并生成最终答案：${previousSearchState.query}`,
-      test_config: getCallbackUrl(request),
-      environment: finalizeSearchId,
-      search_id: finalizeSearchId,
-      test_rounds: 1, // 总结只需要1轮
+      query: `总结并生成最终答案：${previousSearchState.query}`,    // enhanced_search.yml 期望 query
+      callback_url: getCallbackUrl(request),                      // enhanced_search.yml 期望 callback_url
+      workspace_id: finalizeSearchId,                             // enhanced_search.yml 期望 workspace_id
+      search_id: finalizeSearchId,                                // enhanced_search.yml 期望 search_id
       include_scraping: false, // 总结任务不需要爬取新内容
       debug_mode: false,
-      quiet_mode: true,
-      // 传递要总结的信息
-      summary_context: JSON.stringify(summaryData),
+      silent_mode: true,                                          // enhanced_search.yml 期望 silent_mode
+      // 传递要总结的信息 - enhanced_search.yml 期望的字段
+      iterations: JSON.stringify(summaryData.key_findings),       // enhanced_search.yml 期望 iterations
+      final_state: JSON.stringify(summaryData),                   // enhanced_search.yml 期望 final_state
       action_type: 'finalize',
       parent_search_id: search_id
     };
@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            event_type: 'search_trigger',
+            event_type: 'finalize_search',  // 最终化搜索使用专门的事件类型
             client_payload: finalizeData
           })
         }
