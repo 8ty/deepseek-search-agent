@@ -199,25 +199,8 @@ export async function POST(request: NextRequest) {
       include_scraping: true,
       debug_mode: false,
       silent_mode: true,
-      // 将完整的搜索历史信息传递给GitHub Actions
-      continue_metadata: JSON.stringify({
-        is_inline_continuation: true,
-        parent_search_id: search_id,
-        search_id: newSearchId,
-        full_history: fullSearchHistory,
-        instruction: `这是一个页面内继续搜索请求。请基于以下完整的搜索历史信息，继续深入搜索用户的问题：
-
-原始查询: ${fullSearchHistory.original_query}
-已执行轮数: ${fullSearchHistory.total_previous_rounds}
-之前的结果: ${fullSearchHistory.previous_result || '无结果'}
-
-详细历史:
-${fullSearchHistory.detailed_history.map((iter: any, i: number) => 
-  `第${iter.round}轮 (${iter.timestamp}): 执行了${iter.tool_calls?.length || 0}个工具调用`
-).join('\n')}
-
-请基于这些信息，进行更深入的搜索，补充遗漏的信息，或从不同角度探索问题。`
-      })
+      // 传递历史搜索状态信息（GitHub Actions工作流期望的字段名）
+      continue_from_state: JSON.stringify(fullSearchHistory)
     };
 
     console.log(`🚀 准备触发GitHub Actions页面内继续搜索，搜索ID: ${newSearchId}`);

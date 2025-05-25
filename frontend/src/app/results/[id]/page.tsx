@@ -1110,6 +1110,9 @@ export default function ResultPage() {
 
   // 轮询继续搜索状态
   const startContinueSearchPolling = (continueSearchId: string) => {
+    let intervalRef: ReturnType<typeof setInterval> | null = null;
+    let timeoutRef: ReturnType<typeof setTimeout> | null = null;
+    
     const pollContinueSearch = async () => {
       try {
         const response = await fetch(`/api/search-status/${continueSearchId}`);
@@ -1119,32 +1122,43 @@ export default function ResultPage() {
           
           // 如果完成了，停止轮询
           if (data.status === 'completed' || data.status === 'failed' || data.status === 'error' || data.status === 'timeout') {
-            return; // 结束轮询
+            if (intervalRef) {
+              clearInterval(intervalRef);
+              intervalRef = null;
+            }
+            if (timeoutRef) {
+              clearTimeout(timeoutRef);
+              timeoutRef = null;
+            }
+            return true; // 表示轮询已完成
           }
         }
+        return false; // 表示需要继续轮询
       } catch (error) {
         console.error('轮询继续搜索状态失败:', error);
+        return false;
       }
     };
     
     // 立即执行一次
-    pollContinueSearch();
-    
-    // 每5秒轮询一次
-    const interval = setInterval(async () => {
-      await pollContinueSearch();
+    pollContinueSearch().then((completed) => {
+      if (completed) return; // 如果已经完成，不需要开始轮询
       
-      // 检查是否需要停止轮询
-      if (continueSearchState?.status && 
-          ['completed', 'failed', 'error', 'timeout'].includes(continueSearchState.status)) {
-        clearInterval(interval);
-      }
-    }, 5000);
-    
-    // 30秒后自动停止轮询（防止无限轮询）
-    setTimeout(() => {
-      clearInterval(interval);
-    }, 30000);
+      // 每5秒轮询一次
+      intervalRef = setInterval(async () => {
+        const completed = await pollContinueSearch();
+        // pollContinueSearch 内部已经处理了停止轮询的逻辑
+      }, 5000);
+      
+      // 30秒后自动停止轮询（防止无限轮询）
+      timeoutRef = setTimeout(() => {
+        if (intervalRef) {
+          clearInterval(intervalRef);
+          intervalRef = null;
+        }
+        console.warn('继续搜索轮询已超时停止');
+      }, 30000);
+    });
   };
 
   // 渲染搜索结果
