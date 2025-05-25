@@ -387,7 +387,7 @@ const TimeoutHandler: React.FC<TimeoutHandlerProps> = ({
           </h3>
           <p className="text-yellow-700 mb-4"
              style={{ color: '#a16207', marginBottom: '16px' }}>
-            {searchData.message || '搜索已达到设定的最大轮次限制，但可能还有更多信息可以探索。'}
+            搜索已达到设定的最大轮次限制，系统已自动基于收集的信息生成最终结果。如需获取更多详细信息，可选择继续搜索。
           </p>
 
           {searchData.summary && (
@@ -405,29 +405,39 @@ const TimeoutHandler: React.FC<TimeoutHandlerProps> = ({
             </div>
           )}
 
-          <div className="space-y-3" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <p className="text-sm text-yellow-700" style={{ fontSize: '0.875rem', color: '#a16207' }}>
-              您可以选择以下操作：
+          {/* 自动生成结果的提示 */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4"
+               style={{
+                 backgroundColor: '#eff6ff',
+                 border: '1px solid #bfdbfe',
+                 borderRadius: '8px',
+                 padding: '12px',
+                 marginBottom: '16px'
+               }}>
+            <p className="text-blue-800 text-sm"
+               style={{ color: '#1e40af', fontSize: '0.875rem' }}>
+              <strong>💡 提示：</strong> 系统已自动基于收集的信息生成最终结果。如需获取更多详细信息，可继续深入搜索。
             </p>
+          </div>
 
-            <div className="flex flex-col sm:flex-row gap-3"
+          <div className="space-y-3" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+            <div className="flex justify-center"
                  style={{
                    display: 'flex',
-                   flexDirection: 'column',
-                   gap: '12px'
+                   justifyContent: 'center'
                  }}>
 
-              {/* 继续搜索按钮 */}
+              {/* 只保留继续搜索按钮 */}
               <button
                 onClick={handleContinueSearch}
                 disabled={isRequesting}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium py-2 px-6 rounded-lg transition-colors flex items-center justify-center"
                 style={{
-                  flex: 1,
                   backgroundColor: isRequesting ? '#9ca3af' : '#2563eb',
                   color: 'white',
                   fontWeight: '500',
-                  padding: '8px 16px',
+                  padding: '8px 24px',
                   borderRadius: '8px',
                   border: 'none',
                   cursor: isRequesting ? 'not-allowed' : 'pointer',
@@ -451,46 +461,11 @@ const TimeoutHandler: React.FC<TimeoutHandlerProps> = ({
                   '🔄 继续深入搜索'
                 )}
               </button>
-
-              {/* 生成最终结果按钮 */}
-              <button
-                onClick={handleFinalizeResult}
-                disabled={isRequesting}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
-                style={{
-                  flex: 1,
-                  backgroundColor: isRequesting ? '#9ca3af' : '#16a34a',
-                  color: 'white',
-                  fontWeight: '500',
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: isRequesting ? 'not-allowed' : 'pointer',
-                  transition: 'background-color 0.2s',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                {isRequesting && actionType === 'finalize' ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                         style={{ animation: 'spin 1s linear infinite', marginLeft: '-4px', marginRight: '8px', width: '16px', height: '16px' }}
-                         xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    生成中...
-                  </>
-                ) : (
-                  '📝 基于现有信息生成结果'
-                )}
-              </button>
             </div>
 
-            <p className="text-xs text-yellow-600"
-               style={{ fontSize: '0.75rem', color: '#ca8a04' }}>
-              💡 继续搜索将尝试获取更多信息，生成结果将基于当前已收集的信息给出最佳答案。
+            <p className="text-xs text-yellow-600 text-center"
+               style={{ fontSize: '0.75rem', color: '#ca8a04', textAlign: 'center' }}>
+              💡 系统已自动基于当前信息生成结果，继续搜索将获取更多详细信息。
             </p>
           </div>
         </div>

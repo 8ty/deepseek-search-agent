@@ -1091,8 +1091,46 @@ Do NOT rely on your internal knowledge (may be biased), aim to discover informat
         # 如果达到最大轮数但任务未完成
         if not self.workspace.is_done() and self.round >= max_rounds:
             if self.debug_mode and not self.silent_mode:
-                print("⏰ 达到最大轮数限制")
-            # 生成总结性答案
+                print("⏰ 达到最大轮数限制，自动生成最终结果...")
+            
+            # 自动调用最终化方法基于当前状态生成结果
+            try:
+                finalize_result = await self.finalize_with_current_state()
+                
+                # 如果最终化成功，发送完成更新
+                if finalize_result.get("success", False):
+                    if self.debug_mode and not self.silent_mode:
+                        print("✅ 自动最终化成功，发送完成状态")
+                    
+                    await self.send_update("complete", {
+                        "answer": finalize_result.get("answer", "基于收集的信息生成的答案"),
+                        "iterations": self.iteration_results,
+                        "total_rounds": self.round,
+                        "auto_finalized": True,
+                        "message": "达到最大迭代次数，已自动基于收集的信息生成最终结果"
+                    })
+                    
+                    # 更新最终结果
+                    final_result = {
+                        "search_id": self.search_id,
+                        "iterations": self.iteration_results,
+                        "final_state": self.workspace.to_string(),
+                        "is_complete": True,
+                        "answer": finalize_result.get("answer"),
+                        "total_rounds": self.round,
+                        "total_tool_calls": total_tool_calls,
+                        "auto_finalized": True
+                    }
+                    
+                    return final_result
+                else:
+                    if self.debug_mode and not self.silent_mode:
+                        print("⚠️ 自动最终化失败，发送超时状态")
+            except Exception as e:
+                if self.debug_mode and not self.silent_mode:
+                    print(f"❌ 自动最终化异常: {str(e)}")
+            
+            # 如果最终化失败，发送超时状态（原有逻辑）
             summary_answer = f"搜索完成 {self.round} 轮迭代，共执行 {total_tool_calls} 次工具调用。"
             
             if total_tool_calls == 0:
