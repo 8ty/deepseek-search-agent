@@ -194,6 +194,7 @@ export async function POST(request: NextRequest) {
       query: `基于历史信息继续搜索：${previousSearchState.query}`,
       callback_url: getCallbackUrl(request),
       workspace_id: newSearchId,
+      search_id: newSearchId,              // 添加必需的search_id字段
       max_rounds: max_rounds,
       include_scraping: true,
       debug_mode: false,
