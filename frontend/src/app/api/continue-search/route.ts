@@ -189,19 +189,22 @@ export async function POST(request: NextRequest) {
     }
 
     // 准备继续搜索的数据，使用 enhanced_search.yml 工作流的字段格式
+    // 注意：GitHub Repository Dispatch API 限制 client_payload 最多 10 个属性
     const continueSearchData = {
       query: `继续搜索：${previousSearchState.query}`,      // enhanced_search.yml 期望 query
       callback_url: getCallbackUrl(request),               // enhanced_search.yml 期望 callback_url
       workspace_id: newSearchId,                           // enhanced_search.yml 期望 workspace_id
-      search_id: newSearchId,                              // enhanced_search.yml 期望 search_id
       max_rounds: max_rounds,                              // enhanced_search.yml 期望 max_rounds
       include_scraping: true,
       debug_mode: false,
       silent_mode: true,                                   // enhanced_search.yml 期望 silent_mode
-      // 传递继续搜索所需的状态信息
-      continue_from_state: JSON.stringify(compactSearchState),
-      is_continuation: true,
-      parent_search_id: search_id
+      // 合并继续搜索的元数据到一个属性中
+      continue_metadata: JSON.stringify({
+        continue_from_state: compactSearchState,
+        is_continuation: true,
+        parent_search_id: search_id,
+        search_id: newSearchId  // 将search_id移到metadata中
+      })
     };
 
     // 触发GitHub Actions继续搜索，使用与第一次搜索相同的事件类型

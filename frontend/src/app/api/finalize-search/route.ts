@@ -160,19 +160,22 @@ export async function POST(request: NextRequest) {
     console.log(`✅ GitHub配置正常: REPO=${envGithubRepository}`);
 
     // 准备GitHub Actions数据，使用 enhanced_search.yml 工作流的字段格式
+    // 注意：GitHub Repository Dispatch API 限制 client_payload 最多 10 个属性
     const finalizeData = {
       query: `总结并生成最终答案：${previousSearchState.query}`,    // enhanced_search.yml 期望 query
       callback_url: getCallbackUrl(request),                      // enhanced_search.yml 期望 callback_url
       workspace_id: finalizeSearchId,                             // enhanced_search.yml 期望 workspace_id
-      search_id: finalizeSearchId,                                // enhanced_search.yml 期望 search_id
       include_scraping: false, // 总结任务不需要爬取新内容
       debug_mode: false,
       silent_mode: true,                                          // enhanced_search.yml 期望 silent_mode
-      // 传递要总结的信息 - enhanced_search.yml 期望的字段
-      iterations: JSON.stringify(summaryData.key_findings),       // enhanced_search.yml 期望 iterations
-      final_state: JSON.stringify(summaryData),                   // enhanced_search.yml 期望 final_state
-      action_type: 'finalize',
-      parent_search_id: search_id
+      // 合并最终化搜索的元数据到一个属性中
+      finalize_metadata: JSON.stringify({
+        search_id: finalizeSearchId,                              // 将search_id移到metadata中
+        iterations: summaryData.key_findings,                     // 传递要总结的迭代信息
+        final_state: summaryData,                                 // 传递完整的总结数据
+        action_type: 'finalize',
+        parent_search_id: search_id
+      })
     };
 
     console.log('🚀 准备触发GitHub Actions...');
