@@ -1149,6 +1149,8 @@ export default function ResultPage() {
 
   // 渲染搜索结果
   const renderSearchResults = () => {
+    if (!searchData) return null;
+    
     const hasResult = searchData.answer || searchData.results?.answer || searchData.result || searchData.summary;
     const isCompleted = searchData.status === 'completed';
     const isTimeoutWithResult = searchData.status === 'timeout' && hasResult;
