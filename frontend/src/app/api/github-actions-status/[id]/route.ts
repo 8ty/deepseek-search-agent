@@ -78,8 +78,26 @@ export async function GET(
       ).slice(0, 5); // 最近5个
     }
 
+    // 定义运行状态类型
+    interface FormattedRun {
+      id: number;
+      status: string;
+      conclusion: string | null;
+      workflow_name: string;
+      display_title: string;
+      created_at: string;
+      updated_at: string;
+      html_url: string;
+      head_commit: {
+        message?: string;
+        timestamp?: string;
+      };
+      event: string;
+      actor?: string;
+    }
+
     // 格式化运行状态信息
-    const formattedRuns = targetRuns.map((run: any) => ({
+    const formattedRuns: FormattedRun[] = targetRuns.map((run: any) => ({
       id: run.id,
       status: run.status, // queued, in_progress, completed
       conclusion: run.conclusion, // success, failure, neutral, cancelled, skipped, timed_out, action_required
@@ -104,10 +122,10 @@ export async function GET(
       total_count: data.total_count,
       summary: {
         recent_runs: formattedRuns.length,
-        running: formattedRuns.filter(r => r.status === 'in_progress').length,
-        completed: formattedRuns.filter(r => r.status === 'completed').length,
-        success: formattedRuns.filter(r => r.conclusion === 'success').length,
-        failed: formattedRuns.filter(r => r.conclusion === 'failure').length
+        running: formattedRuns.filter((r: FormattedRun) => r.status === 'in_progress').length,
+        completed: formattedRuns.filter((r: FormattedRun) => r.status === 'completed').length,
+        success: formattedRuns.filter((r: FormattedRun) => r.conclusion === 'success').length,
+        failed: formattedRuns.filter((r: FormattedRun) => r.conclusion === 'failure').length
       }
     });
 
