@@ -70,9 +70,20 @@ export async function POST(request: NextRequest) {
       total_previous_rounds: previousSearchState.iterations?.length || 0
     };
 
+    // 获取GitHub配置（使用环境变量）
+    const envGithubToken = process.env.GITHUB_TOKEN;
+    const envGithubRepository = process.env.GITHUB_REPOSITORY;
+    
+    if (!envGithubToken || !envGithubRepository) {
+      return NextResponse.json(
+        { error: "GitHub配置未完成，无法继续搜索" },
+        { status: 500 }
+      );
+    }
+
     // 更新内存中的搜索状态
     const newSearchData = {
-      status: 'running' as const,
+      status: 'pending' as const,
       query: previousSearchState.query,
       createdAt: new Date().toISOString(),
       iterations: [],
@@ -94,34 +105,23 @@ export async function POST(request: NextRequest) {
       console.warn('存储新搜索状态到Blob失败:', blobError);
     }
 
-    // 获取GitHub配置
-    const envGithubToken = process.env.GITHUB_TOKEN;
-    const envGithubRepository = process.env.GITHUB_REPOSITORY;
-    
-    if (!envGithubToken || !envGithubRepository) {
-      return NextResponse.json(
-        { error: "GitHub配置未完成，无法继续搜索" },
-        { status: 500 }
-      );
-    }
-
-    // 准备GitHub Actions数据（只传递必要信息）
+    // 准备继续搜索的数据，模仿第一次搜索的webhookData格式
     const continueSearchData = {
-      test_scope: `继续搜索：${previousSearchState.query}`,
-      test_config: getCallbackUrl(request),
-      environment: newSearchId,
-      search_id: newSearchId,
-      test_rounds: max_rounds,
+      test_scope: `继续搜索：${previousSearchState.query}`,  // GitHub Actions 期望 test_scope
+      test_config: getCallbackUrl(request),                 // GitHub Actions 期望 test_config
+      environment: newSearchId,                             // GitHub Actions 期望 environment，用于WORKSPACE_ID
+      search_id: newSearchId,                               // 保留原有字段以便兼容
+      test_rounds: max_rounds,                              // GitHub Actions 期望 test_rounds
       include_scraping: true,
       debug_mode: false,
-      quiet_mode: true,
+      quiet_mode: true,                                     // GitHub Actions 期望 quiet_mode
       // 传递精简的上下文信息
       previous_context: JSON.stringify(compactSearchState),
       is_continuation: true,
       parent_search_id: search_id
     };
 
-    // 触发GitHub Actions继续搜索
+    // 触发GitHub Actions继续搜索，使用与第一次搜索相同的事件类型
     try {
       const githubResponse = await fetch(
         `https://api.github.com/repos/${envGithubRepository}/dispatches`,
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            event_type: 'search_trigger',
+            event_type: 'search_trigger',  // 使用与第一次搜索相同的事件类型
             client_payload: continueSearchData
           })
         }
@@ -178,7 +178,19 @@ export async function POST(request: NextRequest) {
 }
 
 function getCallbackUrl(request: NextRequest): string {
-  const host = request.headers.get('host') || 'localhost:3000';
-  const protocol = host.includes('localhost') ? 'http' : 'https';
-  return `${protocol}://${host}/api/webhook`;
+  // 尝试从环境变量获取
+  if (process.env.NEXT_PUBLIC_BASE_URL) {
+    return `${process.env.NEXT_PUBLIC_BASE_URL}/api/webhook`;
+  }
+  
+  // 从请求头获取host信息
+  const host = request.headers.get('host');
+  const protocol = request.headers.get('x-forwarded-proto') || 'https';
+  
+  if (host) {
+    return `${protocol}://${host}/api/webhook`;
+  }
+  
+  // 兜底默认值
+  return 'https://your-app.vercel.app/api/webhook';
 } 

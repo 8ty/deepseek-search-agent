@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
 
     // 创建新的搜索数据用于总结任务
     const finalizeSearchData = {
-      status: 'processing' as const,
+      status: 'pending' as const,
       query: `基于现有信息生成最终结果：${previousSearchState.query}`,
       createdAt: new Date().toISOString(),
       iterations: [],
@@ -213,7 +213,19 @@ export async function POST(request: NextRequest) {
 }
 
 function getCallbackUrl(request: NextRequest): string {
-  const host = request.headers.get('host') || 'localhost:3000';
-  const protocol = host.includes('localhost') ? 'http' : 'https';
-  return `${protocol}://${host}/api/webhook`;
+  // 尝试从环境变量获取
+  if (process.env.NEXT_PUBLIC_BASE_URL) {
+    return `${process.env.NEXT_PUBLIC_BASE_URL}/api/webhook`;
+  }
+  
+  // 从请求头获取host信息
+  const host = request.headers.get('host');
+  const protocol = request.headers.get('x-forwarded-proto') || 'https';
+  
+  if (host) {
+    return `${protocol}://${host}/api/webhook`;
+  }
+  
+  // 兜底默认值
+  return 'https://your-app.vercel.app/api/webhook';
 } 
