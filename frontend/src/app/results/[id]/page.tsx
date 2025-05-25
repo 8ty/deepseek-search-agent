@@ -1152,11 +1152,22 @@ export default function ResultPage() {
                            console.error('继续搜索失败:', errorData);
                            
                            // 显示友好的错误信息
-                           if (errorData.details?.suggestion) {
-                             alert(`❌ ${errorData.error}\n\n💡 ${errorData.details.suggestion}\n\n⏰ 当前可以查看已收集的信息。`);
-                           } else {
-                             alert(`❌ 继续搜索失败：${errorData.error || '未知错误'}\n\n💡 您可以稍后重试，或者查看当前已收集的信息。`);
+                           let errorMessage = `❌ ${errorData.error || '继续搜索失败'}\n\n`;
+                           
+                           if (errorData.details) {
+                             if (errorData.details.suggestion) {
+                               errorMessage += `💡 ${errorData.details.suggestion}\n\n`;
+                             }
+                             if (errorData.details.status) {
+                               errorMessage += `🔍 错误详情：HTTP ${errorData.details.status} ${errorData.details.statusText || ''}\n`;
+                             }
+                             if (errorData.details.githubError) {
+                               errorMessage += `📝 GitHub 响应：${errorData.details.githubError}\n\n`;
+                             }
                            }
+                           
+                           errorMessage += `⏰ 当前可以查看已收集的信息。`;
+                           alert(errorMessage);
                          }
                        } catch (error) {
                          console.error('继续搜索请求失败:', error);

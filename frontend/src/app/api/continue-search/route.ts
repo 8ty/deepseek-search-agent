@@ -224,9 +224,28 @@ export async function POST(request: NextRequest) {
 
       if (!githubResponse.ok) {
         const errorText = await githubResponse.text();
-        console.error('GitHub Actions 继续搜索触发失败:', errorText);
+        console.error('❌ GitHub API 调用失败:', {
+          status: githubResponse.status,
+          statusText: githubResponse.statusText,
+          error: errorText,
+          url: `https://api.github.com/repos/${envGithubRepository}/dispatches`
+        });
+        
         return NextResponse.json(
-          { error: "触发继续搜索失败" },
+          { 
+            error: "GitHub Actions 触发失败",
+            details: {
+              status: githubResponse.status,
+              statusText: githubResponse.statusText,
+              githubError: errorText,
+              repository: envGithubRepository,
+              suggestion: githubResponse.status === 404 
+                ? "请检查仓库名称格式是否正确（格式：owner/repo）" 
+                : githubResponse.status === 401 || githubResponse.status === 403
+                ? "请检查 GitHub Token 权限，需要 repo 和 actions 权限"
+                : "请检查 GitHub Actions 配置"
+            }
+          },
           { status: 500 }
         );
       }
