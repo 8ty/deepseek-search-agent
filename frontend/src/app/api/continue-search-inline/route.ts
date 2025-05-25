@@ -78,8 +78,8 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ 找到搜索状态，查询: ${previousSearchState.query}`);
 
-    // 生成新的搜索ID用于继续搜索
-    const newSearchId = `${search_id}-inline-continue-${Date.now()}`;
+    // 页面内继续搜索使用原始搜索ID，在同一页面更新状态
+    const newSearchId = search_id; // 使用原始搜索ID
     
     // 准备完整的搜索历史信息（传递给GitHub Actions）
     const fullSearchHistory = {
@@ -154,37 +154,34 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 创建新的搜索状态
-    const newSearchData = {
-      status: 'pending' as const,
-      query: `页面内继续搜索：${previousSearchState.query}`,
-      createdAt: new Date().toISOString(),
-      iterations: [],
-      result: null,
-      search_id: newSearchId,
-      parent_search_id: search_id,
-      is_inline_continuation: true
+    // 更新原有搜索状态为继续搜索模式
+    const updatedSearchData = {
+      ...previousSearchState,
+      status: 'processing' as const,
+      updatedAt: new Date().toISOString(),
+      is_inline_continuation: true,
+      continue_search_requested_at: new Date().toISOString()
     };
     
-    // 存储到内存
-    memoryStorage.set(`search:${newSearchId}`, newSearchData);
+    // 更新内存中的搜索状态
+    memoryStorage.set(`search:${newSearchId}`, updatedSearchData);
 
-    // 优先存储到 Upstash Redis
+    // 优先更新到 Upstash Redis
     try {
-      await redisUtils.setSearchData(newSearchId, newSearchData);
-      console.log(`✅ 新搜索状态已存储到Upstash Redis: ${newSearchId}`);
+      await redisUtils.setSearchData(newSearchId, updatedSearchData);
+      console.log(`✅ 搜索状态已更新到Upstash Redis: ${newSearchId}`);
     } catch (redisError) {
-      console.warn('⚠️ 存储新搜索状态到Upstash Redis失败，尝试Vercel Blob:', redisError);
+      console.warn('⚠️ 更新搜索状态到Upstash Redis失败，尝试Vercel Blob:', redisError);
       
       // 如果 Redis 失败，回退到 Vercel Blob
       try {
-        await put(`searches/${newSearchId}.json`, JSON.stringify(newSearchData), {
+        await put(`searches/${newSearchId}.json`, JSON.stringify(updatedSearchData), {
           access: 'public',
           addRandomSuffix: false
         });
-        console.log(`✅ 新搜索状态已存储到Vercel Blob: ${newSearchId}`);
+        console.log(`✅ 搜索状态已更新到Vercel Blob: ${newSearchId}`);
       } catch (blobError) {
-        console.warn('⚠️ 存储新搜索状态到Blob也失败:', blobError);
+        console.warn('⚠️ 更新搜索状态到Blob也失败:', blobError);
       }
     }
 
@@ -249,8 +246,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         status: "inline_continue_initiated",
         message: "页面内继续搜索已启动",
-        search_id: newSearchId,
-        parent_search_id: search_id,
+        search_id: newSearchId, // 现在和原始search_id相同
         additional_rounds: max_rounds,
         mode: "github_actions"
       });

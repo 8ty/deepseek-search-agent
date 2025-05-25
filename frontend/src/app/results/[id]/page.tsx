@@ -1072,37 +1072,23 @@ export default function ResultPage() {
       if (response.ok) {
         const result = await response.json();
         
-        if (result.search_id) {
-          // 设置新的搜索ID，开始轮询这个新搜索的状态
-          setContinueSearchId(result.search_id);
-          setContinueSearchState({
-            status: 'processing',
-            query: `继续搜索：${searchData?.query || ''}`,
-            createdAt: new Date().toISOString(),
-            search_id: result.search_id
-          });
+        if (result.search_id === id) {
+          // 页面内继续搜索使用相同的搜索ID，直接触发当前页面的状态更新
+          console.log('页面内继续搜索已启动，当前页面将自动更新');
           
-          // 开始轮询继续搜索的状态
-          startContinueSearchPolling(result.search_id);
+          // 立即刷新当前搜索状态
+          fetchSearchStatus();
+          
+          // 由于使用相同的搜索ID，现有的轮询会自动继续工作
         }
-      } else {
+              } else {
         const errorData = await response.json();
-        setContinueSearchState({
-          status: 'failed',
-          query: `继续搜索：${searchData?.query || ''}`,
-          createdAt: new Date().toISOString(),
-          error: errorData.error || '继续搜索失败'
-        });
         console.error('继续搜索失败:', errorData);
+        alert(`继续搜索失败：${errorData.error || '请稍后重试'}`);
       }
     } catch (error) {
       console.error('继续搜索请求失败:', error);
-      setContinueSearchState({
-        status: 'failed',
-        query: `继续搜索：${searchData?.query || ''}`,
-        createdAt: new Date().toISOString(),
-        error: '继续搜索请求失败'
-      });
+      alert('继续搜索请求失败，请稍后重试');
     } finally {
       setIsContinueSearchLoading(false);
     }
