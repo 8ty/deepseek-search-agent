@@ -13,6 +13,38 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
+    // 首先检查是否配置了访问密钥控制
+    const secretKey = process.env.ACCESS_SECRET_KEY;
+    
+    // 如果配置了访问密钥，则需要验证
+    if (secretKey) {
+      const accessKey = body.access_key;
+      
+      if (!accessKey) {
+        return NextResponse.json(
+          { 
+            error: "需要提供访问密钥",
+            code: "ACCESS_KEY_REQUIRED" 
+          },
+          { status: 401 }
+        );
+      }
+      
+      if (accessKey !== secretKey) {
+        return NextResponse.json(
+          { 
+            error: "访问密钥无效",
+            code: "INVALID_ACCESS_KEY" 
+          },
+          { status: 403 }
+        );
+      }
+      
+      console.log('✅ 访问密钥验证通过');
+    } else {
+      console.log('ℹ️ 未配置访问密钥，跳过验证');
+    }
+    
     // 验证请求数据
     if (!body.query) {
       return NextResponse.json(
@@ -227,12 +259,14 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   // 检查环境变量配置状态
   const envConfigured = !!(process.env.GITHUB_TOKEN && process.env.GITHUB_REPOSITORY);
+  const accessControlEnabled = !!process.env.ACCESS_SECRET_KEY;
   
   return NextResponse.json({
     message: "使用 POST 方法触发搜索",
-    required_fields: ["query"],
+    required_fields: accessControlEnabled ? ["query", "access_key"] : ["query"],
     optional_fields: ["workspace_id", "max_rounds", "include_scraping", "callback_url", "debug_mode", "silent_mode"],
     environment_configured: envConfigured,
+    access_control_enabled: accessControlEnabled,
     github_token_exists: !!process.env.GITHUB_TOKEN,
     github_repository: process.env.GITHUB_REPOSITORY || null
   });

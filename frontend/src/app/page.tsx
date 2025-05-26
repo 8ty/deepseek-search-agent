@@ -6,6 +6,7 @@ interface ConfigStatus {
   environment_configured: boolean;
   github_token_exists: boolean;
   github_repository: string | null;
+  access_control_enabled: boolean;
 }
 
 export default function Home() {
@@ -20,6 +21,9 @@ export default function Home() {
   const [maxRounds, setMaxRounds] = useState(5); // 新增：最大迭代次数设定
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false); // 新增：高级选项显示状态
   const [enableUserInteraction, setEnableUserInteraction] = useState(false); // 新增：用户交互模式
+  const [accessKey, setAccessKey] = useState(''); // 新增：访问密钥
+  const [showAccessKeyInput, setShowAccessKeyInput] = useState(false); // 新增：是否显示访问密钥输入
+  const [accessVerified, setAccessVerified] = useState(false); // 新增：访问是否已验证
 
   // 从 localStorage 加载设置
   useEffect(() => {
@@ -59,12 +63,56 @@ export default function Home() {
   useEffect(() => {
     fetch('/api/trigger-search')
       .then(response => response.json())
-      .then(data => setConfigStatus(data))
+      .then(data => {
+        setConfigStatus(data);
+        // 如果启用了访问控制，显示访问密钥输入
+        if (data.access_control_enabled) {
+          setShowAccessKeyInput(true);
+        }
+      })
       .catch(console.error);
   }, []);
 
+  // 验证访问密钥
+  const verifyAccess = async () => {
+    if (!accessKey.trim()) {
+      alert('请输入访问密钥');
+      return false;
+    }
+
+    try {
+      const response = await fetch('/api/verify-access', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ access_key: accessKey }),
+      });
+
+      if (response.ok) {
+        setAccessVerified(true);
+        alert('访问验证成功！');
+        return true;
+      } else {
+        const error = await response.json();
+        alert(`访问验证失败: ${error.error}`);
+        return false;
+      }
+    } catch (error) {
+      console.error('访问验证出错:', error);
+      alert('访问验证请求失败');
+      return false;
+    }
+  };
+
   const handleSearch = async () => {
     if (!query.trim()) return;
+
+    // 如果启用了访问控制但尚未验证，先进行验证
+    if (configStatus?.access_control_enabled && !accessVerified) {
+      const verified = await verifyAccess();
+      if (!verified) return;
+    }
 
     setIsSearching(true);
     try {
@@ -76,6 +124,11 @@ export default function Home() {
         silent_mode: silentMode, // 传递静默模式状态
         enable_user_interaction: enableUserInteraction // 传递用户交互模式状态
       };
+
+      // 如果启用了访问控制，添加访问密钥
+      if (configStatus?.access_control_enabled) {
+        searchData.access_key = accessKey;
+      }
 
       // 如果环境变量未配置且用户提供了手动配置
       if (!configStatus?.environment_configured && githubToken && githubRepository) {
@@ -156,24 +209,45 @@ export default function Home() {
 
           {/* 配置状态指示器 */}
           {configStatus && (
-            <div className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium"
-                 style={{
-                   display: 'inline-flex',
-                   alignItems: 'center',
-                   padding: '8px 16px',
-                   borderRadius: '9999px',
-                   fontSize: '0.875rem',
-                   fontWeight: '500',
-                   backgroundColor: configStatus.environment_configured ? '#dcfce7' : '#fef3c7',
-                   color: configStatus.environment_configured ? '#166534' : '#92400e'
-                 }}>
-              <span style={{ marginRight: '8px' }}>
-                {configStatus.environment_configured ? '✅' : '⚠️'}
-              </span>
-              {configStatus.environment_configured 
-                ? '环境变量已配置，自动启用 GitHub Actions'
-                : '需要手动配置 GitHub 信息'
-              }
+            <div className="flex flex-col sm:flex-row items-center gap-2 justify-center">
+              <div className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium"
+                   style={{
+                     display: 'inline-flex',
+                     alignItems: 'center',
+                     padding: '8px 16px',
+                     borderRadius: '9999px',
+                     fontSize: '0.875rem',
+                     fontWeight: '500',
+                     backgroundColor: configStatus.environment_configured ? '#dcfce7' : '#fef3c7',
+                     color: configStatus.environment_configured ? '#166534' : '#92400e'
+                   }}>
+                <span style={{ marginRight: '8px' }}>
+                  {configStatus.environment_configured ? '✅' : '⚠️'}
+                </span>
+                {configStatus.environment_configured 
+                  ? '环境变量已配置，自动启用 GitHub Actions'
+                  : '需要手动配置 GitHub 信息'
+                }
+              </div>
+              
+              {configStatus.access_control_enabled && (
+                <div className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium"
+                     style={{
+                       display: 'inline-flex',
+                       alignItems: 'center',
+                       padding: '8px 16px',
+                       borderRadius: '9999px',
+                       fontSize: '0.875rem',
+                       fontWeight: '500',
+                       backgroundColor: accessVerified ? '#dcfce7' : '#fef3c7',
+                       color: accessVerified ? '#166534' : '#92400e'
+                     }}>
+                  <span style={{ marginRight: '8px' }}>
+                    {accessVerified ? '🔓' : '🔐'}
+                  </span>
+                  {accessVerified ? '访问已验证' : '需要验证访问权限'}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -288,6 +362,111 @@ export default function Home() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* 访问密钥输入区域 */}
+          {configStatus?.access_control_enabled && (
+            <div className="mb-6" style={{ marginBottom: '24px' }}>
+              <div className={`p-4 rounded-xl border ${accessVerified ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}
+                   style={{
+                     padding: '16px',
+                     borderRadius: '12px',
+                     backgroundColor: accessVerified ? '#f0fdf4' : '#fffbeb',
+                     border: accessVerified ? '1px solid #bbf7d0' : '1px solid #fde68a'
+                   }}>
+                
+                <div className="flex items-center mb-3">
+                  <span style={{ marginRight: '8px' }}>
+                    {accessVerified ? '✅' : '🔐'}
+                  </span>
+                  <label className="text-sm font-medium"
+                         style={{
+                           fontSize: '0.875rem',
+                           fontWeight: '500',
+                           color: accessVerified ? '#166534' : '#92400e'
+                         }}>
+                    {accessVerified ? '访问已验证' : '访问密钥验证'}
+                  </label>
+                </div>
+
+                {!accessVerified && (
+                  <>
+                    <p className="text-xs text-gray-600 mb-3"
+                       style={{
+                         fontSize: '0.75rem',
+                         color: '#6b7280',
+                         marginBottom: '12px'
+                       }}>
+                      需要输入访问密钥才能使用搜索功能
+                    </p>
+                    
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        value={accessKey}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAccessKey(e.target.value)}
+                        placeholder="请输入访问密钥"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        style={{
+                          flex: '1',
+                          padding: '8px 12px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '8px'
+                        }}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            verifyAccess();
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={verifyAccess}
+                        disabled={!accessKey.trim()}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: accessKey.trim() ? '#2563eb' : '#9ca3af',
+                          color: 'white',
+                          borderRadius: '8px',
+                          border: 'none',
+                          cursor: accessKey.trim() ? 'pointer' : 'not-allowed'
+                        }}
+                      >
+                        验证
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {accessVerified && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-green-700"
+                       style={{
+                         fontSize: '0.75rem',
+                         color: '#15803d'
+                       }}>
+                      访问权限已确认，可以开始搜索
+                    </p>
+                    <button
+                      onClick={() => {
+                        setAccessVerified(false);
+                        setAccessKey('');
+                      }}
+                      className="text-xs text-gray-500 hover:text-gray-700"
+                      style={{
+                        fontSize: '0.75rem',
+                        color: '#6b7280',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      重置
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -564,17 +743,17 @@ export default function Home() {
           {/* 搜索按钮 */}
           <button
             onClick={handleSearch}
-            disabled={!query.trim() || isSearching}
+            disabled={!query.trim() || isSearching || (configStatus?.access_control_enabled && !accessVerified)}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-4 px-6 rounded-xl transition-colors"
             style={{
               width: '100%',
-              backgroundColor: (!query.trim() || isSearching) ? '#9ca3af' : '#2563eb',
+              backgroundColor: (!query.trim() || isSearching || (configStatus?.access_control_enabled && !accessVerified)) ? '#9ca3af' : '#2563eb',
               color: 'white',
               fontWeight: '600',
               padding: '16px 24px',
               borderRadius: '12px',
               border: 'none',
-              cursor: (!query.trim() || isSearching) ? 'not-allowed' : 'pointer',
+              cursor: (!query.trim() || isSearching || (configStatus?.access_control_enabled && !accessVerified)) ? 'not-allowed' : 'pointer',
               transition: 'background-color 0.2s'
             }}
           >
@@ -582,6 +761,11 @@ export default function Home() {
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <span style={{ marginRight: '8px' }}>🔍</span>
                 搜索中...
+              </span>
+            ) : configStatus?.access_control_enabled && !accessVerified ? (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ marginRight: '8px' }}>🔐</span>
+                请先验证访问密钥
               </span>
             ) : (
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
