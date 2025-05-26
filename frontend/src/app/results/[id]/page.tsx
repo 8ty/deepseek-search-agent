@@ -100,13 +100,15 @@ interface TimeoutHandlerProps {
   searchId: string;
   workspaceId: string | null;
   onContinueSearch: () => void;
+  accessKey: string; // 新增：访问密钥
 }
 
 const TimeoutHandler: React.FC<TimeoutHandlerProps> = ({
   searchData,
   searchId,
   workspaceId,
-  onContinueSearch
+  onContinueSearch,
+  accessKey
 }) => {
   const [isRequesting, setIsRequesting] = useState(false);
   const [actionType, setActionType] = useState<'continue' | 'finalize' | null>(null);
@@ -222,14 +224,21 @@ const TimeoutHandler: React.FC<TimeoutHandlerProps> = ({
 
       try {
         // 发送根据当前信息生成最终结果的请求
+        const requestData: any = {
+          search_id: searchId
+        };
+        
+        // 如果有访问密钥，添加到请求中
+        if (accessKey) {
+          requestData.access_key = accessKey;
+        }
+        
         const response = await fetch('/api/finalize-search', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            search_id: searchId
-          }),
+          body: JSON.stringify(requestData),
         });
 
         if (response.ok) {
@@ -1072,14 +1081,21 @@ export default function ResultPage() {
     
     try {
       // 使用新的continue-search API，但是在同一页面内展示结果
+      const requestData: any = { 
+        search_id: id, 
+        max_rounds: 3,
+        inline_mode: true  // 标识为页面内模式
+      };
+      
+      // 如果有访问密钥，添加到请求中
+      if (accessKey) {
+        requestData.access_key = accessKey;
+      }
+      
       const response = await fetch('/api/continue-search-inline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          search_id: id, 
-          max_rounds: 3,
-          inline_mode: true  // 标识为页面内模式
-        }),
+        body: JSON.stringify(requestData),
       });
       
       if (response.ok) {
@@ -1574,6 +1590,7 @@ export default function ResultPage() {
               searchData={searchData}
               searchId={id}
               workspaceId={workspaceId}
+              accessKey={accessKey}
               onContinueSearch={() => {
                 // 重新触发搜索
                 window.location.reload();
