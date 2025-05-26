@@ -2,12 +2,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import memoryStorage from '../../../lib/storage';
 import { list, put } from '@vercel/blob';
 import { redisUtils } from '../../../lib/upstash';
+import { 
+  isAccessKeyConfigured, 
+  verifyAccessKey, 
+  extractAccessKeyFromRequest,
+  createAccessKeyErrorResponse 
+} from '../../../lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     console.log('=== 页面内继续搜索API调用 ===');
     console.log('请求体:', JSON.stringify(body, null, 2));
+    
+    // 1. 访问权限控制验证
+    if (isAccessKeyConfigured()) {
+      const providedKey = extractAccessKeyFromRequest(body);
+      
+      if (!providedKey || !verifyAccessKey(providedKey)) {
+        console.log('❌ 页面内继续搜索访问被拒绝：访问密钥无效');
+        return NextResponse.json(
+          createAccessKeyErrorResponse(),
+          { status: 401 }
+        );
+      }
+      
+      console.log('✅ 页面内继续搜索访问密钥验证通过');
+    }
     
     const { search_id, max_rounds = 3, inline_mode = true } = body;
     
@@ -323,7 +344,7 @@ export async function POST(request: NextRequest) {
     // 准备继续搜索的数据，使用enhanced_search.yml工作流格式
     // 传递增强的历史信息和智能指令
     const continueSearchData = {
-      query: `智能继续搜索：${previousSearchState.query}`,
+      query: `继续搜索刚才的信息：${previousSearchState.query}`,
       callback_url: getCallbackUrl(request),
       workspace_id: newSearchId,
       search_id: newSearchId,              // 添加必需的search_id字段
@@ -331,6 +352,8 @@ export async function POST(request: NextRequest) {
       include_scraping: true,
       debug_mode: false,
       silent_mode: true,
+      // 如果配置了访问密钥，传递给 GitHub Actions 用于回调验证
+      access_key: isAccessKeyConfigured() ? extractAccessKeyFromRequest(body) : undefined,
       // 传递增强的搜索历史状态信息
       continue_from_state: JSON.stringify(enhancedSearchHistory)
     };

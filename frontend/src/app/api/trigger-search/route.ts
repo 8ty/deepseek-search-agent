@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import memoryStorage from '../../../lib/storage';
 import { put } from '@vercel/blob';
 import { redisUtils } from '../../../lib/upstash';
+import { 
+  isAccessKeyConfigured, 
+  verifyAccessKey, 
+  extractAccessKeyFromRequest,
+  createAccessKeyErrorResponse,
+  createConfigMissingResponse 
+} from '../../../lib/auth';
 
 // 注意：在生产环境中应该使用真实的数据库或KV存储
 // 目前使用共享内存存储进行演示
@@ -13,7 +20,32 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    // 验证请求数据
+    // 1. 访问权限控制验证
+    if (isAccessKeyConfigured()) {
+      const providedKey = extractAccessKeyFromRequest(body);
+      
+      if (!providedKey) {
+        console.log('❌ 访问被拒绝：未提供访问密钥');
+        return NextResponse.json(
+          createAccessKeyErrorResponse(),
+          { status: 401 }
+        );
+      }
+      
+      if (!verifyAccessKey(providedKey)) {
+        console.log('❌ 访问被拒绝：访问密钥无效');
+        return NextResponse.json(
+          createAccessKeyErrorResponse(),
+          { status: 401 }
+        );
+      }
+      
+      console.log('✅ 访问密钥验证通过');
+    } else {
+      console.log('⚠️ 访问密钥未配置，跳过验证');
+    }
+    
+    // 2. 验证请求数据
     if (!body.query) {
       return NextResponse.json(
         { 
@@ -104,7 +136,9 @@ export async function POST(request: NextRequest) {
       include_scraping: body.include_scraping !== false,
       debug_mode: body.debug_mode || false,
       quiet_mode: body.silent_mode !== false,   // GitHub Actions 期望 quiet_mode，实际是静默模式
-      enable_user_interaction: body.enable_user_interaction || false  // 新增：用户交互模式选项
+      enable_user_interaction: body.enable_user_interaction || false,  // 新增：用户交互模式选项
+      // 如果配置了访问密钥，传递给 GitHub Actions 用于回调验证
+      access_key: isAccessKeyConfigured() ? extractAccessKeyFromRequest(body) : undefined
     };
 
     // 触发 GitHub Actions（如果配置了Token和Repository）
@@ -231,10 +265,11 @@ export async function GET() {
   return NextResponse.json({
     message: "使用 POST 方法触发搜索",
     required_fields: ["query"],
-    optional_fields: ["workspace_id", "max_rounds", "include_scraping", "callback_url", "debug_mode", "silent_mode"],
+    optional_fields: ["workspace_id", "max_rounds", "include_scraping", "callback_url", "debug_mode", "silent_mode", "access_key"],
     environment_configured: envConfigured,
     github_token_exists: !!process.env.GITHUB_TOKEN,
-    github_repository: process.env.GITHUB_REPOSITORY || null
+    github_repository: process.env.GITHUB_REPOSITORY || null,
+    access_key_required: isAccessKeyConfigured() // 新增：告知前端是否需要访问密钥
   });
 }
 

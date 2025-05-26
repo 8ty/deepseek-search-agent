@@ -166,15 +166,22 @@ const TimeoutHandler: React.FC<TimeoutHandlerProps> = ({
 
       try {
         // 发送继续搜索请求
+        const requestData: any = {
+          search_id: searchId,
+          max_rounds: 3 // 额外的迭代次数
+        };
+        
+        // 如果有访问密钥，添加到请求中
+        if (accessKey) {
+          requestData.access_key = accessKey;
+        }
+        
         const response = await fetch('/api/continue-search', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            search_id: searchId,
-            max_rounds: 3 // 额外的迭代次数
-          }),
+          body: JSON.stringify(requestData),
         });
 
         if (response.ok) {
@@ -735,12 +742,20 @@ export default function ResultPage() {
   
   // 页面内继续搜索的状态
   const [isContinueSearchLoading, setIsContinueSearchLoading] = useState(false);
+  
+  // 访问密钥状态
+  const [accessKey, setAccessKey] = useState<string>('');
 
-  // 从 localStorage 加载 debug 模式设置
+  // 从 localStorage 加载设置
   useEffect(() => {
     const savedDebugMode = localStorage.getItem('deepseek-debug-mode');
+    const savedAccessKey = localStorage.getItem('deepseek-access-key');
+    
     if (savedDebugMode === 'true') {
       setDebugMode(true);
+    }
+    if (savedAccessKey) {
+      setAccessKey(savedAccessKey);
     }
   }, []);
 

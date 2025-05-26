@@ -6,6 +6,7 @@ interface ConfigStatus {
   environment_configured: boolean;
   github_token_exists: boolean;
   github_repository: string | null;
+  access_key_required: boolean; // 新增：是否需要访问密钥
 }
 
 export default function Home() {
@@ -20,16 +21,23 @@ export default function Home() {
   const [maxRounds, setMaxRounds] = useState(5); // 新增：最大迭代次数设定
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false); // 新增：高级选项显示状态
   const [enableUserInteraction, setEnableUserInteraction] = useState(false); // 新增：用户交互模式
+  const [accessKey, setAccessKey] = useState(''); // 新增：访问密钥
+  const [showAccessKeyInput, setShowAccessKeyInput] = useState(false); // 新增：是否显示访问密钥输入
 
   // 从 localStorage 加载设置
   useEffect(() => {
     const savedDebugMode = localStorage.getItem('deepseek-debug-mode');
     const savedSilentMode = localStorage.getItem('deepseek-silent-mode');
+    const savedAccessKey = localStorage.getItem('deepseek-access-key');
+    
     if (savedDebugMode === 'true') {
       setDebugMode(true);
     }
     if (savedSilentMode !== null) {
       setSilentMode(savedSilentMode === 'true');
+    }
+    if (savedAccessKey) {
+      setAccessKey(savedAccessKey);
     }
   }, []);
 
@@ -55,16 +63,39 @@ export default function Home() {
     }
   };
 
+  // 保存访问密钥到 localStorage
+  const handleAccessKeyChange = (key: string) => {
+    setAccessKey(key);
+    if (key) {
+      localStorage.setItem('deepseek-access-key', key);
+    } else {
+      localStorage.removeItem('deepseek-access-key');
+    }
+  };
+
   // 检查配置状态
   useEffect(() => {
     fetch('/api/trigger-search')
       .then(response => response.json())
-      .then(data => setConfigStatus(data))
+      .then(data => {
+        setConfigStatus(data);
+        // 如果需要访问密钥且还没有，自动显示输入框
+        if (data.access_key_required && !accessKey) {
+          setShowAccessKeyInput(true);
+        }
+      })
       .catch(console.error);
-  }, []);
+  }, [accessKey]);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
+
+    // 检查是否需要访问密钥
+    if (configStatus?.access_key_required && !accessKey.trim()) {
+      setShowAccessKeyInput(true);
+      alert('请先输入访问密钥才能进行搜索');
+      return;
+    }
 
     setIsSearching(true);
     try {
@@ -76,6 +107,11 @@ export default function Home() {
         silent_mode: silentMode, // 传递静默模式状态
         enable_user_interaction: enableUserInteraction // 传递用户交互模式状态
       };
+
+      // 如果需要访问密钥，添加到请求中
+      if (configStatus?.access_key_required && accessKey) {
+        searchData.access_key = accessKey;
+      }
 
       // 如果环境变量未配置且用户提供了手动配置
       if (!configStatus?.environment_configured && githubToken && githubRepository) {
@@ -100,7 +136,13 @@ export default function Home() {
         // 跳转到结果页面，包含workspace_id参数
         window.location.href = `/results/${result.search_id}?workspace_id=${result.workspace_id}`;
       } else {
-        alert(`搜索失败: ${result.error}`);
+        // 如果是访问权限错误，显示访问密钥输入框
+        if (response.status === 401 && result.code === 'ACCESS_DENIED') {
+          setShowAccessKeyInput(true);
+          alert('访问密钥无效，请重新输入正确的访问密钥');
+        } else {
+          alert(`搜索失败: ${result.error}`);
+        }
       }
     } catch (error) {
       console.error('搜索出错:', error);
@@ -156,25 +198,63 @@ export default function Home() {
 
           {/* 配置状态指示器 */}
           {configStatus && (
-            <div className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium"
-                 style={{
-                   display: 'inline-flex',
-                   alignItems: 'center',
-                   padding: '8px 16px',
-                   borderRadius: '9999px',
-                   fontSize: '0.875rem',
-                   fontWeight: '500',
-                   backgroundColor: configStatus.environment_configured ? '#dcfce7' : '#fef3c7',
-                   color: configStatus.environment_configured ? '#166534' : '#92400e'
-                 }}>
-              <span style={{ marginRight: '8px' }}>
-                {configStatus.environment_configured ? '✅' : '⚠️'}
-              </span>
-              {configStatus.environment_configured 
-                ? '环境变量已配置，自动启用 GitHub Actions'
-                : '需要手动配置 GitHub 信息'
-              }
-            </div>
+            <>
+              <div className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium mb-4"
+                   style={{
+                     display: 'inline-flex',
+                     alignItems: 'center',
+                     padding: '8px 16px',
+                     borderRadius: '9999px',
+                     fontSize: '0.875rem',
+                     fontWeight: '500',
+                     backgroundColor: configStatus.environment_configured ? '#dcfce7' : '#fef3c7',
+                     color: configStatus.environment_configured ? '#166534' : '#92400e',
+                     marginBottom: '16px'
+                   }}>
+                <span style={{ marginRight: '8px' }}>
+                  {configStatus.environment_configured ? '✅' : '⚠️'}
+                </span>
+                {configStatus.environment_configured 
+                  ? '环境变量已配置，自动启用 GitHub Actions'
+                  : '需要手动配置 GitHub 信息'
+                }
+              </div>
+
+              {/* 访问权限状态指示器 */}
+              {configStatus.access_key_required && (
+                <div className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium"
+                     style={{
+                       display: 'inline-flex',
+                       alignItems: 'center',
+                       padding: '8px 16px',
+                       borderRadius: '9999px',
+                       fontSize: '0.875rem',
+                       fontWeight: '500',
+                       backgroundColor: accessKey ? '#dcfce7' : '#fef2f2',
+                       color: accessKey ? '#166534' : '#dc2626'
+                     }}>
+                  <span style={{ marginRight: '8px' }}>
+                    {accessKey ? '🔓' : '🔒'}
+                  </span>
+                  {accessKey ? '访问密钥已设置' : '需要访问密钥'}
+                  {!accessKey && (
+                    <button
+                      onClick={() => setShowAccessKeyInput(true)}
+                      style={{
+                        marginLeft: '8px',
+                        background: 'none',
+                        border: 'none',
+                        color: '#dc2626',
+                        cursor: 'pointer',
+                        textDecoration: 'underline'
+                      }}
+                    >
+                      点击输入
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -210,6 +290,102 @@ export default function Home() {
               disabled={isSearching}
             />
           </div>
+
+          {/* 访问密钥输入区域 */}
+          {configStatus?.access_key_required && showAccessKeyInput && (
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl"
+                 style={{
+                   marginBottom: '24px',
+                   padding: '16px',
+                   backgroundColor: '#fefce8',
+                   border: '1px solid #fbbf24',
+                   borderRadius: '12px'
+                 }}>
+              <div className="flex items-center mb-3"
+                   style={{
+                     display: 'flex',
+                     alignItems: 'center',
+                     marginBottom: '12px'
+                   }}>
+                <span style={{ marginRight: '8px', fontSize: '1.2rem' }}>🔑</span>
+                <h3 className="text-lg font-medium text-gray-900"
+                    style={{
+                      fontSize: '1.125rem',
+                      fontWeight: '500',
+                      color: '#111827'
+                    }}>
+                  访问密钥验证
+                </h3>
+              </div>
+              <p className="text-sm text-gray-600 mb-4"
+                 style={{
+                   fontSize: '0.875rem',
+                   color: '#4b5563',
+                   marginBottom: '16px'
+                 }}>
+                该站点启用了访问控制，请输入管理员提供的访问密钥以继续使用搜索功能。
+              </p>
+              <div className="flex gap-3"
+                   style={{
+                     display: 'flex',
+                     gap: '12px'
+                   }}>
+                <input
+                  type="password"
+                  value={accessKey}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleAccessKeyChange(e.target.value)}
+                  placeholder="请输入访问密钥..."
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  style={{
+                    flex: '1',
+                    padding: '8px 12px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px'
+                  }}
+                  onKeyPress={(e: React.KeyboardEvent) => {
+                    if (e.key === 'Enter') {
+                      setShowAccessKeyInput(false);
+                    }
+                  }}
+                />
+                <button
+                  onClick={() => setShowAccessKeyInput(false)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#2563eb',
+                    color: 'white',
+                    borderRadius: '8px',
+                    border: 'none',
+                    fontWeight: '500',
+                    cursor: 'pointer'
+                  }}
+                >
+                  确认
+                </button>
+                {accessKey && (
+                  <button
+                    onClick={() => {
+                      handleAccessKeyChange('');
+                      setShowAccessKeyInput(false);
+                    }}
+                    className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 font-medium"
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#6b7280',
+                      color: 'white',
+                      borderRadius: '8px',
+                      border: 'none',
+                      fontWeight: '500',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    清除
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* 手动配置区域 */}
           {configStatus && !configStatus.environment_configured && (

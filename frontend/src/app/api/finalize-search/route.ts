@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import memoryStorage from '../../../lib/storage';
 import { list, put } from '@vercel/blob';
 import { redisUtils } from '../../../lib/upstash';
+import { 
+  isAccessKeyConfigured, 
+  verifyAccessKey, 
+  extractAccessKeyFromRequest,
+  createAccessKeyErrorResponse 
+} from '../../../lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,6 +15,21 @@ export async function POST(request: NextRequest) {
     
     const body = await request.json();
     console.log('📥 请求体:', JSON.stringify(body, null, 2));
+    
+    // 1. 访问权限控制验证
+    if (isAccessKeyConfigured()) {
+      const providedKey = extractAccessKeyFromRequest(body);
+      
+      if (!providedKey || !verifyAccessKey(providedKey)) {
+        console.log('❌ 生成最终结果访问被拒绝：访问密钥无效');
+        return NextResponse.json(
+          createAccessKeyErrorResponse(),
+          { status: 401 }
+        );
+      }
+      
+      console.log('✅ 生成最终结果访问密钥验证通过');
+    }
     
     const { search_id } = body;
     
@@ -168,6 +189,8 @@ export async function POST(request: NextRequest) {
       include_scraping: false, // 总结任务不需要爬取新内容
       debug_mode: false,
       silent_mode: true,                                          // enhanced_search.yml 期望 silent_mode
+      // 如果配置了访问密钥，传递给 GitHub Actions 用于回调验证
+      access_key: isAccessKeyConfigured() ? extractAccessKeyFromRequest(body) : undefined,
       // 合并最终化搜索的元数据到一个属性中
       finalize_metadata: JSON.stringify({
         search_id: finalizeSearchId,                              // 将search_id移到metadata中

@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import memoryStorage from '../../../lib/storage';
 import { put } from '@vercel/blob';
 import { redisUtils } from '../../../lib/upstash';
+import { 
+  isAccessKeyConfigured, 
+  verifyAccessKey, 
+  extractAccessKeyFromRequest,
+  createAccessKeyErrorResponse 
+} from '../../../lib/auth';
 
 // 注意：在生产环境中应该使用真实的数据库或KV存储
 // 目前使用共享内存存储进行演示
@@ -76,6 +82,23 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log('=== WEBHOOK POST 接收数据 ===');
     console.log('完整请求体:', JSON.stringify(body, null, 2));
+
+    // 1. 访问权限控制验证
+    if (isAccessKeyConfigured()) {
+      const providedKey = extractAccessKeyFromRequest(body);
+      
+      if (!providedKey || !verifyAccessKey(providedKey)) {
+        console.log('❌ Webhook 访问被拒绝：访问密钥无效');
+        return NextResponse.json(
+          createAccessKeyErrorResponse(),
+          { status: 401 }
+        );
+      }
+      
+      console.log('✅ Webhook 访问密钥验证通过');
+    } else {
+      console.log('⚠️ Webhook 访问密钥未配置，跳过验证');
+    }
 
     // 从URL参数获取search_id（GitHub Action发送时会在URL中）
     const url = new URL(request.url);
